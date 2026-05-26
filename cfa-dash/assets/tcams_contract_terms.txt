@@ -1,0 +1,181 @@
+TCAMS CUSTOMS CLEARANCE SERVICES
+
+Terms and Conditions of Service
+
+Version 1.0 | Effective Date: January 1, 2025
+
+SERVICE PROVIDER
+
+TCAMS International Ltd.
+
+Mombasa, Kenya
+
+info@tcams.info
+
+CLIENT
+
+Mason Rhys International
+
+Nairobi, Kenya
+
+chituyi@masonrhysinternational.com
+
+1. Definitions
+
+For the purposes of this Agreement, the following terms shall have the meanings ascribed to them below:
+
+"Agreement" means these Terms and Conditions together with any Service Order or engagement letter.
+
+"Services" means customs clearance, freight forwarding, documentation, and any ancillary logistics services provided by TCAMS.
+
+"Shipment" means any cargo, goods, or consignment entrusted to TCAMS for handling.
+
+"Client" refers to the party engaging TCAMS for services as identified in the applicable Service Order.
+
+"BL/Reference" means the Bill of Lading or unique reference number assigned to a Shipment.
+
+"Clearance Scope" means the specific customs and logistics activities agreed upon per Shipment.
+
+2. Scope of Services
+
+2.1 General Services
+
+TCAMS agrees to provide customs clearance and freight forwarding services as outlined in each Service Order, which may include:
+
+Import and export customs declarations and documentation
+
+Duty and tax assessment and payment on behalf of the Client
+
+Coordination with Kenya Revenue Authority (KRA) and relevant port authorities
+
+Inland transportation and delivery arrangements
+
+Pre-arrival documentation and Import Declaration Form (IDF) processing
+
+2.2 Service Limitations
+
+TCAMS shall not be liable for delays or failures arising from:
+
+Government inspections, audits, or holds beyond TCAMS's control
+
+Inaccurate, incomplete, or misleading documentation provided by the Client
+
+Force majeure events including strikes, natural disasters, or port congestion
+
+Changes in customs regulations or tariff classifications
+
+3. Client Obligations
+
+The Client agrees to:
+
+Provide accurate and complete shipment information including cargo description, origin, destination, value, and HS codes prior to arrival of goods.
+
+Submit all required documentation (commercial invoice, packing list, certificates of origin, permits) in a timely manner.
+
+Ensure goods comply with all applicable import/export regulations of the relevant jurisdictions.
+
+Make payment of all fees, duties, taxes, and disbursements within the agreed payment terms.
+
+Promptly notify TCAMS of any changes to shipment details, routing, or consignee information.
+
+4. Fees and Payment
+
+4.1 Service Fees
+
+Service fees shall be as quoted in the applicable Service Order or pro-forma invoice. All fees are exclusive of applicable taxes, government duties, port charges, and third-party costs unless expressly stated otherwise.
+
+4.2 Disbursements
+
+The Client authorizes TCAMS to make payments on its behalf for customs duties, taxes, port fees, and other government charges. All such disbursements shall be reimbursed by the Client within 7 days of invoicing.
+
+4.3 Payment Terms
+
+Standard payment: Net 30 days from invoice date
+
+Government duties and port fees: Due prior to release of goods
+
+Late payment interest: 2% per month on overdue balances
+
+Returned payments: USD 50 handling fee per occurrence
+
+5. Limitation of Liability
+
+TCAMS's total liability to the Client under this Agreement shall not exceed the total service fees paid by the Client for the specific Shipment giving rise to the claim. TCAMS shall not be liable for:
+
+Indirect, consequential, incidental, or punitive damages
+
+Loss of profit, revenue, or business opportunity
+
+Damage or loss of goods while in the custody of third-party carriers or government authorities
+
+Delays caused by regulatory inspections or government actions
+
+The Client shall indemnify and hold TCAMS harmless against any claims, penalties, or fines arising from inaccurate or incomplete information provided by the Client.
+
+6. Confidentiality
+
+Both parties agree to maintain the confidentiality of all non-public information exchanged in connection with this Agreement. This obligation shall survive termination of the Agreement for a period of three (3) years. Neither party shall disclose confidential information to any third party without prior written consent, except as required by law or regulatory authority.
+
+7. Termination
+
+7.1 Termination for Convenience
+
+Either party may terminate this Agreement upon thirty (30) days' written notice to the other party. The Client shall remain liable for all fees and disbursements incurred up to the date of termination.
+
+7.2 Termination for Cause
+
+TCAMS may immediately suspend or terminate services upon:
+
+Non-payment of fees or disbursements beyond 14 days overdue
+
+Provision of fraudulent, misleading, or illegal documentation by the Client
+
+Client's involvement in smuggling, sanctions violations, or prohibited trade
+
+8. Dispute Resolution
+
+Any disputes arising from this Agreement shall be resolved as follows:
+
+Negotiation: The parties shall first attempt to resolve disputes amicably within 14 days of written notice.
+
+Mediation: If negotiation fails, disputes shall be submitted to mediation under the Nairobi Centre for International Arbitration (NCIA) rules.
+
+Arbitration: Unresolved disputes shall be referred to binding arbitration in Nairobi, Kenya under the Arbitration Act, Cap. 49.
+
+The governing law of this Agreement shall be the laws of the Republic of Kenya.
+
+9. General Provisions
+
+Entire Agreement: This Agreement constitutes the entire understanding between the parties and supersedes all prior negotiations.
+
+Amendments: No amendment to this Agreement shall be valid unless in writing and signed by both parties.
+
+Severability: If any provision is found invalid, the remaining provisions shall continue in full force.
+
+Waiver: Failure to enforce any provision shall not constitute a waiver of future enforcement.
+
+Assignment: Neither party may assign this Agreement without prior written consent of the other party.
+
+ACCEPTANCE AND SIGNATURES
+
+For and on behalf of TCAMS International Ltd.
+
+Authorized Signature
+
+Name: _______________________
+
+Title: ________________________
+
+Date: ________________________
+
+For and on behalf of Mason Rhys International
+
+Authorized Signature
+
+Name: _______________________
+
+Title: ________________________
+
+Date: ________________________
+
+TCAMS International Ltd. | info@tcams.info | Mombasa, Kenya | Confidential

@@ -1,0 +1,130 @@
+PAGE 1 / 2    B/L No. CMAU1839718662    CMA CGM
+Carrier: CMA CGM S.A.
+147, Boulevard Joliot Curie, 13008 Marseille, France BILL OF LADING CMA CGMCMA CGM S.A.
+Shipper:
+PAGARIYA EXPORTS PRIVATE LIMITED
+PLOT NO. 19, HOUSE NO. 1256/U1,
+GREAT NAG ROAD, RAMBAGH,
+NAGPUR – 440018, MAHARASHTRA, INDIA
+GSTIN: 27AAACP1234F1Z5
+Carrier's Reference:
+21127523
+B/L-No.:
+CMAU1839718662
+Page:
+1 / 2
+Export References / Booking No.:
+CMA-IND-TZ-17341
+Forwarding Agent:
+TRANS OCEAN LOGISTICS PVT. LTD., MUMBAI
+Place of Receipt:
+NAGPUR ICD, INDIA
+Consignee (not negotiable unless consigned to order):
+ETS ARAKA
+AVENUE MOERO NO 2, Q- MAKUTANO,
+LUBUMBAHSI, DRC
+PH: +243-900965510 | EMAIL: INFO.ARAKA@GMAIL.COM
+Notify Address:
+ETS ARAKA
+AVENUE MOERO NO 2, Q- MAKUTANO,
+LUBUMBAHSI, DRC
+PH: +243-900965510 | EMAIL: INFO.ARAKA@GMAIL.COM
+Consignee's Reference:
+ARK-2026-6234
+Place of Delivery:
+DAR ES SALAAM
+Vessel(s):
+CMA CGM AFRICA ONE
+Voyage-No.:
+A1308S
+Movement:
+FCL + LCL
+Port of Loading:
+MUNDRA
+Port of Discharge:
+DAR-ES-SALAAM
+Container Nos., Seal Nos., Marks and Nos.Number and Kind of Packages, Description of Goods Gross Weight Measurement
+MARKS & NOS:
+GOLDEN HARVEST
+GESU 8445000
+SEAL: CMA7252261
+MSCU 4430449
+SEAL: CMA7202709
+HLXU 8371036
+SEAL: CMA7253274
+3 CNTRS + 1 LOOSE CARGO
+3240 BAGS (FCL) + 300 BAGS (LOOSE)
+3X20' CONTAINERS CONTAINING
+IR64 PARBOILED RICE 5% BROKEN
+MARKS & NOS: GOLDEN HARVEST
+PACKING: 25 KG ONE SIDE BOPP BAGS
+TOTAL NO. OF PACKAGES (FCL): 3240 BAGS
+TOTAL NO. OF PACKAGES (LOOSE): 300 BAGS (50KG PP WOVEN)
+TOTAL NET WEIGHT (FCL): 81.000 MTS
+TOTAL NET WEIGHT (LOOSE): 15.000 MTS
+TOTAL GROSS WEIGHT: 96.345 MTS
+S.BILL NO: 9966480
+DATED: 23-MAR-2026
+FREIGHT PREPAID
+SHIPPER DECLARES: "CARGO IN TRANSIT TO LUBUMBASHI DRC ON
+CONSIGNEE OWN RISK. CARRIER RESPONSIBILITY CEASES AT DAR ES
+SALAAM, TANZANIA"
+LOOSE CARGO – Break-Bulk, Not Containerized
+96,345.000
+KGS
+96,000.000
+NET KGS
+81.630
+CBM + 30 CBM
+(LOOSE)
+Shipper's Declared Value:
+Total Containers received by Carrier: 3
+Movement: FCL + LCL   Currency: USD
+Charge Rate Basis P/C
+O/F – CNT/W P
+THC – CNT/W P
+Total Freight Prepaid:
+Total Freight Collect:
+Above Particulars as declared by Shipper. Without responsibility or warranty as to correctness by Carrier. 
+ORIGINAL
+RECEIVED by the Carrier from the Shipper in apparent good order and condition. This Bill of Lading is subject to all
+terms and conditions hereof including the terms and conditions on the reverse hereof and the terms and conditions
+of the Carrier's applicable tariff.
+IN WITNESS WHEREOF the number of original Bills of Lading stated below all of this tenor and date has been signed, one
+of which being accomplished the others to stand void.
+Place and date of issue:
+MUMBAI    27-MAR-2026
+Freight payable at: ORIGIN
+Number of original Bs/L: ONE OF THREE
+Prepared for: j.patrick@capitalpay.co.tz
+FOR ABOVE NAMED CARRIERCMA CGM S.A.
+(AS AGENT) – CMA CGM INDIA PVT. LTD., MUMBAI
+Ananya PatelAnanya Patel – Authorized Signatory
+CMA CGM S.A. · 147, Boulevard Joliot Curie, 13008 Marseille, France · TEST DOCUMENT – FOR SYSTEM TESTING PURPOSES ONLY 
+CMA CGM S.A.    CMA CGM
+Page 2 / 2 B/L-No. CMAU1839718662
+Cont/Seals/Marks Packages/Description Weight Measure
+GESU 8445000   20'GP   SLAC*:1080 BAGS    27,065.000 KGS
+SEAL: CMA7252261
+MSCU 4430449   20'GP   SLAC*:1080 BAGS    27,065.000 KGS
+SEAL: CMA7202709
+HLXU 8371036   20'GP   SLAC*:1080 BAGS    27,065.000 KGS
+SEAL: CMA7253274
+LOOSE/BREAKBULK: 300 BAGS x 50KG            15,150.000 KGS
+[Stowed in vessel hold – Not containerized]
+*SLAC = Shipper's Load, Stow, Weight and Count
+SHIPPED ON BOARD, DATE: 25-MAR-2026
+PORT OF LOADING: MUNDRA
+VESSEL NAME: CMA CGM AFRICA ONE   VOYAGE: A1308S
+Origin Port Charge Prepaid
+Sea Freight Prepaid
+Destination Port Charge Collect
+DESTINATION AGENT NAME & ADDRESS:
+CMA CGM TANZANIA, SOKOINE DRIVE, DAR ES SALAAM
+The Merchant undertakes and warrants that, under no circumstances, shall the Goods and/or Containers listed in this Bill of Lading (i) originate from, be
+stuffed in, or be on-carried from the territory of the Russian Federation or the Republic of Belarus prior to loading at the port of loading, nor (ii) be
+destined for or on-carried to the territory of the Russian Federation or the Republic of Belarus following unloading at the port of discharge. 
+⚠️ TEST DOCUMENT – Generated for system testing purposes only. Not a valid shipping document.
+Prepared for: j.patrick@capitalpay.co.tz | BL Type: BL3_3Containers_1Loose | Generated: 2026 
+Ananya PatelAnanya Patel – For CMA CGM S.A. (as Agent)
+CMA CGM S.A. · 147, Boulevard Joliot Curie, 13008 Marseille, France 

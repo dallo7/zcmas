@@ -1,0 +1,135 @@
+PAGE_TUTORIALS = {
+    "Dashboard": {
+        "objective": "Monitor your company's live BL, Z-SAD, invoice, payment, and release work.",
+        "steps": [
+            "Review the metric cards for BLs, reviewed BLs, active Z-SADs, invoices, and settled payments.",
+            "Use the quick actions to jump into the next operational task.",
+            "Check Operational Updates for unread events, pending BL reviews, active Z-SADs, checkout work, and outstanding invoices.",
+            "Use Agentic Mode when you want the guided BL-to-invoice workflow.",
+            "Read Recent Notifications to confirm the latest system events.",
+        ],
+        "outcome": "You know what needs attention and can continue shipment processing without admin-only approval actions.",
+    },
+    "Agentic Mode": {
+        "objective": "Let ZCAMS guide a BL through extraction, validation, Z-SAD, invoice, and client sharing steps.",
+        "steps": [
+            "Open Agentic Mode from the Dashboard header.",
+            "Upload the BL and wait for the extraction progress to complete.",
+            "Confirm the five critical values: BL number, consignee TIN, gross weight, cargo/container count, and Service Fee or Full Settlement.",
+            "Enter the client email and phone number before running the workflow.",
+            "Run Agentic Workflow and watch the milestones until the invoice is generated and shared.",
+        ],
+        "outcome": "The BL-to-invoice journey is completed with visible checkpoints and client notification.",
+    },
+    "BLs": {
+        "objective": "Capture or upload a Bill of Lading so it can enter the Z-SAD workflow.",
+        "steps": [
+            "Enter the BL number, route type, transport mode, and ZRA regime.",
+            "Add shipper, carrier, origin, destination, consignee, and cargo details.",
+            "Select the GN 83 cargo category so the minimum fee can be calculated.",
+            "Submit the BL record and confirm it appears in the uploaded BL list.",
+            "Open Reviewed BL when the document is ready for compliance review.",
+        ],
+        "outcome": "The BL is saved and ready for review, Z-SAD generation, and invoicing.",
+    },
+    "Reviewed BL": {
+        "objective": "Create a Z-SAD from an uploaded BL, manage the active Z-SAD, replace the BL when corrections are needed, and prepare payment.",
+        "steps": [
+            "Open Reviewed BL after a BL has been uploaded and saved.",
+            "Find the BL in the awaiting review table and click Review & Issue Z-SAD.",
+            "Confirm the BL appears in Active Reviewed BLs with one single-use active Z-SAD.",
+            "Choose Service or Full Settlement to request the correct GN 83 invoice.",
+            "Use Replace BL only when the current BL journey must be retired and uploaded again.",
+            "Issue cargo release only after payment settlement rules are met.",
+        ],
+        "outcome": "The active page refreshes, the BL has one active Z-SAD, superseded Z-SADs stay in history, and billing can continue.",
+    },
+    "Invoices": {
+        "objective": "Create and settle GN 83-compliant invoices linked to reviewed BLs.",
+        "steps": [
+            "Confirm the reviewed BL and Z-SAD are correct before billing.",
+            "Choose Full Settlement or Service Fee Only based on the payment scenario.",
+            "Let ZCAMS calculate minimum fee, admin fee, VAT, and total.",
+            "Use the generated invoice record for payment follow-up.",
+            "Mark the invoice as settled once payment is confirmed.",
+        ],
+        "outcome": "The invoice status reflects payment progress and can trigger cargo release logic.",
+    },
+    "Check-out": {
+        "objective": "Share secure CapitalPay payment links with the CFA or importer.",
+        "steps": [
+            "Find the invoice awaiting payment.",
+            "Review the invoice amount, Z-SAD, and checkout link.",
+            "Open the CapitalPay checkout link for direct payment.",
+            "Use WhatsApp sharing to send the secure link to the payer.",
+            "Return to Invoices after settlement to confirm status.",
+        ],
+        "outcome": "The payer receives the correct secure payment link and can complete payment.",
+    },
+    "Contracts": {
+        "objective": "Create importer contracts and track signature status.",
+        "steps": [
+            "Enter importer name, phone, email, and contract terms.",
+            "Create the contract record and verify the generated contract number.",
+            "Share the contract link through WhatsApp when needed.",
+            "Mark the contract as signed after importer acceptance.",
+            "Keep the contract list as the operational record.",
+        ],
+        "outcome": "Importer agreements are recorded and ready to support shipment processing.",
+    },
+    "Company Profile": {
+        "objective": "Review ZAFFA company details and compliance completeness.",
+        "steps": [
+            "Check company registration details, TPIN, ZRA licence, and contact information.",
+            "Review address and banking details for completeness.",
+            "Inspect the compliance score for missing information.",
+            "Upload missing company documents directly from the Company Profile page if needed.",
+            "Use this page before approving or auditing a CFA.",
+        ],
+        "outcome": "You understand whether the company profile is ready for operational use.",
+    },
+    "Notifications": {
+        "objective": "Track system events across onboarding, BLs, Z-SADs, invoices, and payments.",
+        "steps": [
+            "Open the notification list to see latest system activity.",
+            "Scan event names to identify the module involved.",
+            "Read the message for the exact action taken.",
+            "Use the related module to continue the workflow if follow-up is required.",
+            "Treat notifications as the audit-friendly activity feed.",
+        ],
+        "outcome": "You can quickly reconstruct what changed and what needs action.",
+    },
+    "Support": {
+        "objective": "Raise and track support issues connected to any ZCAMS module.",
+        "steps": [
+            "Enter a clear support subject.",
+            "Describe the issue and select the linked module.",
+            "Choose the priority based on operational impact.",
+            "Submit the ticket and confirm it appears in the list.",
+            "Update the ticket status as the issue progresses.",
+        ],
+        "outcome": "Operational problems are recorded, prioritized, and trackable. ZCAMS human support call or WhatsApp: +25479008080.",
+    },
+    "ZCAMS Chat": {
+        "objective": "Ask guided questions about ZCAMS workflows, GN 83, BL review, Z-SADs, and payments.",
+        "steps": [
+            "Type a focused question about the task you are trying to complete.",
+            "Ask about GN 83 rules, Z-SAD handling, invoices, Check-out, or cargo release.",
+            "Use the response as operational guidance inside the POC.",
+            "If the question is outside the assistant scope, raise a Support ticket.",
+            "Keep sensitive importer or cargo data out of general questions unless needed.",
+        ],
+        "outcome": "You receive quick workflow guidance without leaving the system.",
+    },
+    "GN 83 Schedule": {
+        "objective": "Look up the minimum agency fee schedule used by invoice calculations.",
+        "steps": [
+            "Choose the route type: Import, Export, or Transit.",
+            "Find the transport mode: Sea/Inland Waterways, Road, or Air.",
+            "Match the cargo description to the correct tariff category.",
+            "Check the unit of measure and minimum fee.",
+            "Use the fee category consistently when creating BL cargo records.",
+        ],
+        "outcome": "The correct GN 83 minimum fee is applied before invoicing.",
+    },
+}

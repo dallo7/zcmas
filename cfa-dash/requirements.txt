@@ -1,0 +1,82 @@
+# ZCAMS (cfa-dash) — pinned from .venv on 2026-05-20
+# Install: python -m pip install -r requirements.txt
+
+# --- Core app ---
+dash==4.1.0
+dash-mantine-components==2.7.0
+dash-iconify==0.1.2
+python-dotenv==1.2.2
+requests==2.34.2
+reportlab==4.5.1
+
+# --- Dash / Flask stack (transitive) ---
+Flask==3.1.3
+Werkzeug==3.1.8
+plotly==6.7.0
+blinker==1.9.0
+click==8.4.0
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+nest-asyncio==1.6.0
+retrying==1.4.2
+importlib_metadata==9.0.0
+zipp==4.1.0
+narwhals==2.21.2
+
+# --- HTTP / utilities ---
+certifi==2026.4.22
+charset-normalizer==3.4.7
+idna==3.15
+urllib3==2.7.0
+packaging==26.2
+
+# --- BL OCR (PDF text + scanned pages) ---
+pdf2image==1.17.0
+pillow==12.2.0
+pypdf==6.11.0
+PyMuPDF==1.27.2.3
+pytesseract==0.3.13
+chandra-ocr[hf]==0.2.0
+openai==2.38.0
+
+# --- ZCAMS Chat (optional; CHAT_MODEL_ENABLED=true) ---
+transformers==5.8.1
+accelerate==1.13.0
+torch==2.12.0
+sentencepiece==0.2.1
+huggingface_hub==1.15.0
+tokenizers==0.22.2
+safetensors==0.7.0
+filelock==3.29.0
+fsspec==2026.4.0
+hf-xet==1.5.0
+numpy==2.4.6
+networkx==3.6.1
+sympy==1.14.0
+mpmath==1.3.0
+regex==2026.5.9
+PyYAML==6.0.3
+tqdm==4.67.3
+psutil==7.2.2
+typing_extensions==4.15.0
+
+# --- Hugging Face / CLI helpers (transitive) ---
+annotated-doc==0.0.4
+anyio==4.13.0
+colorama==0.4.6
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+markdown-it-py==4.2.0
+mdurl==0.1.2
+Pygments==2.20.0
+rich==15.0.0
+shellingham==1.5.4
+typer==0.25.1
+setuptools==81.0.0
+
+# --- Dev / test ---
+pytest==9.0.3
+iniconfig==2.3.0
+pluggy==1.6.0

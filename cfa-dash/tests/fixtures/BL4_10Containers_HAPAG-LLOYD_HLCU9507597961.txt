@@ -1,0 +1,142 @@
+PAGE 1 / 2    B/L No. HLCU9507597961    HAPAG-LLOYD
+Carrier: Hapag-Lloyd Aktiengesellschaft
+Ballindamm 25, D-20095 Hamburg, Germany BILL OF LADING HAP AG-LLOYDHapag-Lloyd Aktiengesellschaft
+Shipper:
+PAGARIYA EXPORTS PRIVATE LIMITED
+PLOT NO. 19, HOUSE NO. 1256/U1,
+GREAT NAG ROAD, RAMBAGH,
+NAGPUR – 440018, MAHARASHTRA, INDIA
+GSTIN: 27AAACP1234F1Z5
+Carrier's Reference:
+28819736
+B/L-No.:
+HLCU9507597961
+Page:
+1 / 2
+Export References / Booking No.:
+HLC-IND-TZ-60980
+Forwarding Agent:
+TRANS OCEAN LOGISTICS PVT. LTD., MUMBAI
+Place of Receipt:
+NAGPUR ICD, INDIA
+Consignee (not negotiable unless consigned to order):
+ETS ARAKA
+AVENUE MOERO NO 2, Q- MAKUTANO,
+LUBUMBAHSI, DRC
+PH: +243-900965510 | EMAIL: INFO.ARAKA@GMAIL.COM
+Notify Address:
+ETS ARAKA
+AVENUE MOERO NO 2, Q- MAKUTANO,
+LUBUMBAHSI, DRC
+PH: +243-900965510 | EMAIL: INFO.ARAKA@GMAIL.COM
+Consignee's Reference:
+ARK-2026-7236
+Place of Delivery:
+DAR ES SALAAM
+Vessel(s):
+HANOVER EXPRESS
+Voyage-No.:
+HE310W
+Movement:
+FCL/FCL
+Port of Loading:
+MUNDRA
+Port of Discharge:
+DAR-ES-SALAAM
+Container Nos., Seal Nos., Marks and Nos.Number and Kind of Packages, Description of Goods Gross Weight Measurement
+MARKS & NOS:
+GOLDEN HARVEST
+MSCU 6803798 | SEAL: HLK2832608
+CMAU 4401517 | SEAL: HLK2818413
+YMLU 5533783 | SEAL: HLK2873856
+CMAU 4895942 | SEAL: HLK2806439
+HLXU 5750543 | SEAL: HLK2898338
+FBIU 2874630 | SEAL: HLK2892574
+NIDU 0347835 | SEAL: HLK2801095
+HLXU 2087964 | SEAL: HLK2846127
+NIDU 3083860 | SEAL: HLK2878995
+CAIU 4011011 | SEAL: HLK2838523
+10 CNTRS
+10,800 BAGS
+10X20' CONTAINERS CONTAINING
+IR64 PARBOILED RICE 5% BROKEN
+MARKS & NOS: GOLDEN HARVEST
+PACKING: 25 KG ONE SIDE BOPP BAGS
+TOTAL NO. OF PACKAGES: 10,800 BAGS
+TOTAL NET WEIGHT: 270.000 MTS
+TOTAL GROSS WEIGHT: 270.650 MTS
+S.BILL NO: 9939110
+DATED: 23-MAR-2026
+FREIGHT PREPAID
+SHIPPER DECLARES: "CARGO IN TRANSIT TO LUBUMBASHI DRC ON
+CONSIGNEE OWN RISK, COSTS AND RESPONSIBILITY. CARRIER
+RESPONSIBILITY CEASES AT DAR ES SALAAM, TANZANIA"
+270,650.000
+KGS
+270,000.000
+NET KGS
+270.000
+CBM
+Shipper's Declared Value:
+Total Containers received by Carrier: 10
+Movement: FCL/FCL   Currency: USD
+Charge Rate Basis P/C
+O/F – CNT/W P
+THC – CNT/W P
+Total Freight Prepaid:
+Total Freight Collect:
+Above Particulars as declared by Shipper. Without responsibility or warranty as to correctness by Carrier. 
+ORIGINAL
+RECEIVED by the Carrier from the Shipper in apparent good order and condition. This Bill of Lading is subject to all
+terms and conditions hereof including the terms and conditions on the reverse hereof and the terms and conditions
+of the Carrier's applicable tariff.
+IN WITNESS WHEREOF the number of original Bills of Lading stated below all of this tenor and date has been signed, one
+of which being accomplished the others to stand void.
+Place and date of issue:
+MUMBAI    27-MAR-2026
+Freight payable at: ORIGIN
+Number of original Bs/L: ONE OF THREE
+Prepared for: j.patrick@capitalpay.co.tz
+FOR ABOVE NAMED CARRIERHAPAG-LLOYD AKTIENGESELLSCHAFT
+(AS AGENT) – HAPAG-LLOYD INDIA PVT. LTD., MUMBAI
+Neena TanejaNeena Taneja – Authorized Signatory
+Hapag-Lloyd Aktiengesellschaft · Ballindamm 25, D-20095 Hamburg, Germany · TEST DOCUMENT – FOR SYSTEM TESTING PURPOSES ONLY 
+Hapag-Lloyd Aktiengesellschaft    HAPAG-LLOYD
+Page 2 / 2 B/L-No. HLCU9507597961
+Cont/Seals/Marks Packages/Description Weight Measure
+MSCU 6803798   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2832608
+CMAU 4401517   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2818413
+YMLU 5533783   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2873856
+CMAU 4895942   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2806439
+HLXU 5750543   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2898338
+FBIU 2874630   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2892574
+NIDU 0347835   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2801095
+HLXU 2087964   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2846127
+NIDU 3083860   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2878995
+CAIU 4011011   20'GP   SLAC*:1080 BAGS   27,065.000 KGS
+SEAL: HLK2838523
+*SLAC = Shipper's Load, Stow, Weight and Count
+SHIPPED ON BOARD, DATE: 25-MAR-2026
+PORT OF LOADING: MUNDRA
+VESSEL NAME: HANOVER EXPRESS   VOYAGE: HE310W
+Origin Port Charge Prepaid
+Sea Freight Prepaid
+Destination Port Charge Collect
+DESTINATION AGENT NAME & ADDRESS:
+HAPAG-LLOYD TANZANIA, OHIO STREET, DAR ES SALAAM
+The Merchant undertakes and warrants that, under no circumstances, shall the Goods and/or Containers listed in this Bill of Lading (i) originate from, be
+stuffed in, or be on-carried from the territory of the Russian Federation or the Republic of Belarus prior to loading at the port of loading, nor (ii) be
+destined for or on-carried to the territory of the Russian Federation or the Republic of Belarus following unloading at the port of discharge. 
+⚠️ TEST DOCUMENT – Generated for system testing purposes only. Not a valid shipping document.
+Prepared for: j.patrick@capitalpay.co.tz | BL Type: BL4_10Containers | Generated: 2026 
+Neena TanejaNeena Taneja – For Hapag-Lloyd Aktiengesellschaft (as Agent)
+Hapag-Lloyd Aktiengesellschaft · Ballindamm 25, D-20095 Hamburg, Germany 
