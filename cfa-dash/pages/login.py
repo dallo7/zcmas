@@ -11,7 +11,7 @@ def layout(**_kwargs):
     demo_users = [
         user
         for user in repository.list_demo_users()
-        if user.get("role") not in {"SUPER_ADMIN", "COMPANY_ADMIN"}
+        if user.get("role") == "COMPANY_ADMIN"
     ]
     return html.Div(
         [
@@ -89,7 +89,7 @@ def layout(**_kwargs):
                                     html.Div(
                                         [
                                             html.Label("Username or Email"),
-                                            dcc.Input(id="login-email", placeholder="agent or agent@zaffa.co.zm", className="form-control"),
+                                            dcc.Input(id="login-email", placeholder="companyadmin or admin@zaffa.co.zm", className="form-control"),
                                         ],
                                         className="form-group",
                                     ),
