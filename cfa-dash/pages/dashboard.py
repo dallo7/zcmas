@@ -51,7 +51,7 @@ def layout(**_kwargs):
                     ),
                     html.Div(
                         [
-                            _updates_panel(stats, notifications),
+                            _updates_panel(stats),
                             html.Div(
                                 [
                                     html.H2("Recent Notifications"),
@@ -98,16 +98,13 @@ def layout(**_kwargs):
     )
 
 
-def _updates_panel(stats: dict, notifications: list[dict]):
+def _updates_panel(stats: dict):
     pending_actions = (
         int(stats.get("bls_pending") or 0)
         + int(stats.get("reviewed_invoice_ready") or 0)
         + int(stats.get("checkout_pending") or 0)
         + int(stats.get("release_pending") or 0)
     )
-    latest = notifications[0] if notifications else {}
-    latest_label = (latest.get("event_type") or "No updates").replace("_", " ").title()
-    latest_message = latest.get("message") or "No recent operational updates yet."
     return html.Div(
         [
             html.H2("Operational Updates"),
@@ -175,14 +172,6 @@ def _updates_panel(stats: dict, notifications: list[dict]):
                     ),
                 ],
                 className="update-stat-grid",
-            ),
-            html.Div(
-                [
-                    html.Span("Latest update", className="update-latest-label"),
-                    html.Strong(latest_label),
-                    html.P(latest_message, className="muted"),
-                ],
-                className="update-latest-card",
             ),
         ],
         className="card section-card updates-panel",
