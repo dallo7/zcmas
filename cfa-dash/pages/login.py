@@ -8,7 +8,11 @@ register_page(__name__, path="/login", name="Login")
 
 
 def layout(**_kwargs):
-    demo_users = repository.list_demo_users()
+    demo_users = [
+        user
+        for user in repository.list_demo_users()
+        if user.get("role") not in {"SUPER_ADMIN", "COMPANY_ADMIN"}
+    ]
     return html.Div(
         [
             html.Nav(
@@ -77,7 +81,7 @@ def layout(**_kwargs):
                                                 )
                                                 for user in demo_users
                                             ],
-                                            html.Small("Password for all demo users: demo123", className="field-hint"),
+                                            html.Small("Password for demo user: demo123", className="field-hint"),
                                         ],
                                         className="login-demo-users",
                                     ),
@@ -85,7 +89,7 @@ def layout(**_kwargs):
                                     html.Div(
                                         [
                                             html.Label("Username or Email"),
-                                            dcc.Input(id="login-email", placeholder="superadmin or admin@zaffa.co.zm", className="form-control"),
+                                            dcc.Input(id="login-email", placeholder="agent or agent@zaffa.co.zm", className="form-control"),
                                         ],
                                         className="form-group",
                                     ),
