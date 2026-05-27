@@ -4,7 +4,7 @@ import base64
 import io
 import os
 import re
-from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
 
@@ -38,16 +38,15 @@ def extract_bl_fields(file_path: str | None = None) -> dict:
         return {**DEMO_EXTRACTION, "ocr_provider": "mock", "ocr_mode": "demo"}
 
     path = Path(file_path)
-    provider = os.getenv("OCR_PROVIDER", "mock").lower()
+    provider = os.getenv("OCR_PROVIDER", "openai").lower()
     try:
         if path.suffix.lower() == ".pdf":
-            text = extract_text_pdf(path)
-            if text.strip():
-                return _build_extraction_result(parse_bl_text(text), text, provider, "text_pdf")
-            text, ocr_mode, ocr_provider = extract_image_ocr(path, provider, pdf_image=True)
-            return _build_extraction_result(parse_bl_text(text), text, ocr_provider, ocr_mode)
-        text, ocr_mode, ocr_provider = extract_image_ocr(path, provider, pdf_image=False)
-        return _build_extraction_result(parse_bl_text(text), text, ocr_provider, ocr_mode)
+            text, mode, ocr_provider = route_pdf_text(path)
+            return _build_extraction_result(parse_bl_text(text), text, ocr_provider, mode)
+        if provider == "mock":
+            raise ValueError("Image uploads require OpenAI OCR. Set OCR_PROVIDER=openai and OPENAI_API_KEY.")
+        text, mode = extract_text_with_openai(path, pdf_image=False)
+        return _build_extraction_result(parse_bl_text(text), text, "openai", mode)
     except Exception as exc:
         return {
             **DEMO_EXTRACTION,
@@ -55,24 +54,52 @@ def extract_bl_fields(file_path: str | None = None) -> dict:
             "ocr_mode": "fallback_demo",
             "ocr_error": str(exc),
         }
-    return {**DEMO_EXTRACTION, "ocr_provider": provider, "ocr_mode": "demo"}
 
 
-def extract_image_ocr(file_path: Path, provider: str, *, pdf_image: bool) -> tuple[str, str, str]:
-    image_provider = os.getenv("OCR_IMAGE_PROVIDER", provider if provider != "mock" else "openai").lower()
-    if image_provider in {"openai", "openai_api", "gpt"}:
-        text, mode = extract_text_with_openai(file_path, pdf_image=pdf_image)
+def route_pdf_text(path: Path) -> tuple[str, str, str]:
+    """Try embedded PDF text first; fall back to OpenAI image OCR when empty or slow."""
+    provider = os.getenv("OCR_PROVIDER", "openai").lower()
+
+    if _pdf_likely_scanned(path):
+        if provider == "mock":
+            raise ValueError("Scanned PDF requires OpenAI OCR. Set OCR_PROVIDER=openai and OPENAI_API_KEY.")
+        text, mode = extract_text_with_openai(path, pdf_image=True)
         return text, mode, "openai"
-    if image_provider in {"tesseract", "pytesseract", "auto"}:
-        text, mode = extract_text_with_tesseract(file_path, pdf_image=pdf_image)
-        return text, mode, "pytesseract"
-    if image_provider == "chandra":
-        text, mode = extract_text_with_chandra_package(file_path, pdf_image=pdf_image)
-        return text, mode, "chandra"
-    raise ValueError(
-        "This file has no readable PDF text. Set OCR_IMAGE_PROVIDER=openai, chandra, or pytesseract "
-        "to convert it to images and run OCR."
-    )
+
+    timeout_sec = float(os.getenv("OCR_TEXT_PDF_TIMEOUT_SEC", "5"))
+    text, timed_out = _extract_text_pdf_timed(path, timeout_sec)
+    if not timed_out and text.strip():
+        return text, "text_pdf", "pypdf" if provider != "mock" else "mock"
+
+    if provider == "mock":
+        raise ValueError("Scanned PDF requires OpenAI OCR. Set OCR_PROVIDER=openai and OPENAI_API_KEY.")
+    text, mode = extract_text_with_openai(path, pdf_image=True)
+    return text, mode, "openai"
+
+
+def _pdf_likely_scanned(path: Path) -> bool:
+    """Fast probe: skip the timed text pass when pages look image-only."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(str(path))
+        if not reader.pages:
+            return True
+        for page in reader.pages[: min(len(reader.pages), 3)]:
+            if len((page.extract_text() or "").strip()) > 30:
+                return False
+        return True
+    except Exception:
+        return True
+
+
+def _extract_text_pdf_timed(path: Path, timeout_sec: float) -> tuple[str, bool]:
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(extract_text_pdf, path)
+        try:
+            return future.result(timeout=timeout_sec), False
+        except FuturesTimeoutError:
+            return "", True
 
 
 def _build_extraction_result(fields: dict, text: str, provider: str, mode: str) -> dict:
@@ -108,125 +135,70 @@ def extract_text_with_openai(file_path: Path, *, pdf_image: bool | None = None) 
     if not api_key:
         raise ValueError("OPENAI_API_KEY is required for OpenAI OCR on scanned PDFs/images.")
 
+    if not pages:
+        return "", mode
+
+    max_workers = max(1, min(int(os.getenv("OPENAI_OCR_MAX_WORKERS", "3")), len(pages)))
+    if len(pages) == 1 or max_workers == 1:
+        chunks = [_openai_ocr_page_text(page, index=1, api_key=api_key)]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            chunks = list(
+                executor.map(
+                    lambda item: _openai_ocr_page_text(item[1], index=item[0], api_key=api_key),
+                    enumerate(pages, start=1),
+                )
+            )
+
+    return "\n\n".join(chunk for chunk in chunks if chunk.strip()), mode
+
+
+def _openai_ocr_page_text(page, *, index: int, api_key: str) -> str:
     from openai import OpenAI
 
     client = OpenAI(api_key=api_key)
     model = os.getenv("OPENAI_OCR_MODEL", "gpt-5.4-mini")
     store = os.getenv("OPENAI_OCR_STORE", "false").lower() == "true"
-    content = []
-    for idx, page in enumerate(pages, start=1):
-        buffer = io.BytesIO()
-        page.save(buffer, format="PNG", optimize=True)
-        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-        content.append(
-            {
-                "type": "input_image",
-                "image_url": f"data:image/png;base64,{encoded}",
-            }
-        )
-        content.append({"type": "input_text", "text": f"--- PAGE {idx} ---"})
-
-    content.append(
-        {
-            "type": "input_text",
-            "text": (
-                "Extract ALL text from these Bill of Lading page images exactly as it appears. "
-                "Preserve headings, tables, labels, values, and line breaks. "
-                "Separate pages with '--- PAGE X ---'. Do not summarize. Return raw extracted text only."
-            ),
-        }
-    )
+    encoded = base64.b64encode(_encode_page_image(page)).decode("ascii")
     response = client.responses.create(
         model=model,
-        input=[{"role": "user", "content": content}],
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:image/jpeg;base64,{encoded}",
+                    },
+                    {
+                        "type": "input_text",
+                        "text": (
+                            f"Extract ALL text from Bill of Lading page {index} exactly as it appears. "
+                            "Preserve headings, tables, labels, values, and line breaks. "
+                            "Do not summarize. Return raw extracted text only."
+                        ),
+                    },
+                ],
+            }
+        ],
         store=store,
     )
-    return response.output_text, mode
+    return response.output_text or ""
 
 
-def extract_text_with_tesseract(file_path: Path, *, pdf_image: bool | None = None) -> tuple[str, str]:
-    pages, mode, text_pdf = _ocr_pages(file_path, pdf_image=pdf_image)
-    if text_pdf is not None:
-        return text_pdf, mode
+def _encode_page_image(page) -> bytes:
+    from PIL import Image
 
-    try:
-        import pytesseract
-    except ImportError as exc:
-        raise ValueError("pytesseract is required for scanned PDF/image OCR. Install pytesseract and Tesseract OCR.") from exc
+    image = page.convert("RGB")
+    max_width = int(os.getenv("OPENAI_OCR_MAX_WIDTH", "1800"))
+    if image.width > max_width:
+        ratio = max_width / float(image.width)
+        image = image.resize((max_width, max(1, int(image.height * ratio))), Image.Resampling.LANCZOS)
 
-    tesseract_cmd = os.getenv("TESSERACT_CMD")
-    if tesseract_cmd:
-        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-
-    lang = os.getenv("TESSERACT_LANG", "eng")
-    config = os.getenv("TESSERACT_CONFIG", "--psm 6")
-    chunks: list[str] = []
-    for page in pages:
-        text = pytesseract.image_to_string(page, lang=lang, config=config)
-        if text.strip():
-            chunks.append(text)
-    return "\n\n".join(chunks), mode
-
-
-@lru_cache(maxsize=1)
-def chandra_inference_manager():
-    from chandra.model import InferenceManager
-
-    method = os.getenv("CHANDRA_METHOD", "hf").lower()
-    return InferenceManager(method=method)
-
-
-def extract_text_with_chandra_package(file_path: Path, *, pdf_image: bool | None = None) -> tuple[str, str]:
-    pages, mode, text_pdf = _ocr_pages(file_path, pdf_image=pdf_image)
-    if text_pdf is not None:
-        return text_pdf, mode
-
-    from chandra.model.schema import BatchInputItem
-
-    manager = chandra_inference_manager()
-    batch_size = max(1, int(os.getenv("CHANDRA_BATCH_SIZE", "1")))
-    chunks: list[str] = []
-    for start in range(0, len(pages), batch_size):
-        batch = [
-            BatchInputItem(image=page, prompt_type=os.getenv("CHANDRA_PROMPT_TYPE", "ocr_layout"))
-            for page in pages[start : start + batch_size]
-        ]
-        results = manager.generate(
-            batch,
-            include_images=False,
-            include_headers_footers=True,
-        )
-        for result in results:
-            text = result.markdown or result.raw
-            if text.strip():
-                chunks.append(text)
-    return "\n\n".join(chunks), mode
-
-
-def extract_text_with_chandra(file_path: Path, *, pdf_image: bool | None = None) -> tuple[str, str]:
-    suffix = file_path.suffix.lower()
-    if suffix == ".pdf":
-        if pdf_image is not True:
-            text_pdf = extract_text_pdf(file_path)
-            if text_pdf.strip():
-                return text_pdf, "text_pdf"
-        pages = pdf_to_images(file_path)
-        mode = "image_pdf_ocr"
-    else:
-        from PIL import Image
-
-        pages = [Image.open(file_path).convert("RGB")]
-        mode = "image_ocr"
-
-    pipe = chandra_pipeline()
-    chunks: list[str] = []
-    for page in pages:
-        result = pipe(page)
-        if isinstance(result, list) and result:
-            chunks.append(str(result[0].get("generated_text", "")))
-        else:
-            chunks.append(str(result))
-    return "\n\n".join(chunk for chunk in chunks if chunk.strip()), mode
+    buffer = io.BytesIO()
+    quality = int(os.getenv("OPENAI_OCR_JPEG_QUALITY", "82"))
+    image.save(buffer, format="JPEG", quality=quality, optimize=True)
+    return buffer.getvalue()
 
 
 def extract_text_pdf(file_path: Path) -> str:
@@ -240,28 +212,22 @@ def extract_text_pdf(file_path: Path) -> str:
 
 
 def pdf_to_images(file_path: Path):
+    dpi = int(os.getenv("OPENAI_OCR_DPI", "200"))
+    max_pages = max(1, int(os.getenv("OPENAI_OCR_MAX_PAGES", "2")))
     try:
         import fitz
         from PIL import Image
 
         doc = fitz.open(str(file_path))
         pages = []
-        for page in doc:
-            pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72), alpha=False)
+        for page in doc[:max_pages]:
+            pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72), alpha=False)
             pages.append(Image.frombytes("RGB", [pix.width, pix.height], pix.samples))
         return pages
     except Exception:
         from pdf2image import convert_from_path
 
-        return convert_from_path(str(file_path), dpi=300)
-
-
-@lru_cache(maxsize=1)
-def chandra_pipeline():
-    from transformers import pipeline
-
-    model_name = os.getenv("OCR_MODEL", "datalab-to/chandra-ocr-2")
-    return pipeline("image-text-to-text", model=model_name, trust_remote_code=True)
+        return convert_from_path(str(file_path), dpi=dpi, first_page=1, last_page=max_pages)
 
 
 def parse_bl_text(text: str) -> dict:

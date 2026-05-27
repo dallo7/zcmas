@@ -29,11 +29,8 @@ def _capture_field(label: str, control, *, span: int = 1) -> html.Div:
 
 
 UPLOAD_PROGRESS_STAGES = [
-    (12, "Uploading document…"),
-    (28, "Scanning pages…"),
-    (45, "Running OCR extraction…"),
-    (62, "Validating BL fields…"),
-    (82, "Almost ready — prepare to review the uploaded document against the BL and apply enforcement."),
+    (20, "Uploading document…"),
+    (55, "Running OCR extraction…"),
     (100, "OCR complete"),
 ]
 
@@ -46,7 +43,7 @@ def layout(**_kwargs):
             dcc.Store(id="bl-extracted-data"),
             dcc.Store(id="bl-upload-pending"),
             dcc.Store(id="bl-duplicate-conflict"),
-            dcc.Interval(id="bl-upload-interval", interval=700, disabled=True, n_intervals=0),
+            dcc.Interval(id="bl-upload-interval", interval=350, disabled=True, n_intervals=0),
             header(
                 "Bill of Lading Management",
                 actions=[
@@ -485,7 +482,7 @@ def run_bl_upload_progress(n_intervals, pending):
     stage_idx = min(n_intervals, len(UPLOAD_PROGRESS_STAGES) - 1)
     pct, label = UPLOAD_PROGRESS_STAGES[stage_idx]
     progress = _progress_bar(pct, label)
-    review_prompt = _review_prompt_banner() if pct >= 82 and pct < 100 else None
+    review_prompt = _review_prompt_banner() if pct >= 55 and pct < 100 else None
 
     if n_intervals < len(UPLOAD_PROGRESS_STAGES) - 1:
         return (
