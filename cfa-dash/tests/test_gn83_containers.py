@@ -13,10 +13,11 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 os.environ.setdefault("CAPITALPAY_MODE", "mock")
 
 from app import server
+from services import auth
 from services.gn83 import calculate_invoice, gn83_quote_for_reviewed, lookup_fee
 from services.ocr import extract_bl_fields, extract_text_pdf, parse_bl_text
 from services.db import connect
-from services.repository import bootstrap, create_bl, generate_invoice, get_reviewed_bl
+from services.repository import bootstrap, create_bl, generate_invoice, get_reviewed_bl, authenticate_user
 
 
 def _cleanup_bl(bl_numbers: list[str]) -> None:
@@ -132,6 +133,9 @@ def test_e2e_ten_container_invoice_amounts():
     assert full_inv["total"] == 2088.0
 
     client = server.test_client()
+    user = authenticate_user("companyadmin", "demo123")
+    assert user
+    auth.install_client_session(client, user)
     assert client.get(f"/download/invoice/{service_inv['id']}.pdf").status_code == 200
 
 

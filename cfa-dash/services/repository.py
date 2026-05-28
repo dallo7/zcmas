@@ -18,14 +18,16 @@ from typing import Any
 from urllib.parse import urlencode
 
 from services import capitalpay
-from services.chat_service import answer_question
+from services.chat_service import answer_question, clear_document_cache
 from services.db import DATA_DIR, UPLOAD_DIR, connect, init_db, rows_to_dicts
 from services.gn83 import billable_units, calculate_invoice, gn83_quote_for_reviewed, lookup_fee
 from services.messaging import (
     invoice_share_email,
     mailto_url,
+    new_user_registration_email,
     onboarding_approval_email,
     send_email,
+    send_new_user_registration_email,
     send_sms,
     whatsapp_url,
 )
@@ -47,6 +49,11 @@ BL_CANCEL_REASONS = (
 )
 
 BL_CANCELLED_SUFFIX = "::CANCELLED::"
+
+# Declarant and Agent are the same operational role; AGENT is normalized to DECLARANT.
+OPERATIONAL_ROLE = "DECLARANT"
+LEGACY_AGENT_ROLE = "AGENT"
+
 DEMO_USERS = [
     {
         "id": "user-super-admin-demo",
@@ -76,9 +83,21 @@ DEMO_USERS = [
         "username": "agent",
         "phone": "971234568",
         "whatsapp": "971234568",
-        "role": "AGENT",
+        "role": OPERATIONAL_ROLE,
     },
 ]
+
+
+def normalize_role(role: str | None) -> str:
+    """Declarant = Agent — one operational clearance role."""
+    normalized = (role or OPERATIONAL_ROLE).upper()
+    if normalized == LEGACY_AGENT_ROLE:
+        return OPERATIONAL_ROLE
+    return normalized
+
+
+def is_operational_role(role: str | None) -> bool:
+    return normalize_role(role) == OPERATIONAL_ROLE
 
 
 def new_id(prefix: str) -> str:
@@ -219,11 +238,34 @@ def ensure_demo_users() -> None:
                 ),
             )
             existing = conn.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET username = ?, role = ?, first_name = ?, last_name = ?, email = ?,
+                        phone = ?, whatsapp = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        user["username"],
+                        user["role"],
+                        user["first_name"],
+                        user["last_name"],
+                        user["email"],
+                        user["phone"],
+                        user["whatsapp"],
+                        user["id"],
+                    ),
+                )
             if not existing or not existing["password_hash"]:
                 conn.execute(
                     "UPDATE users SET username = ?, password_hash = ?, password_salt = ? WHERE id = ?",
                     (user["username"], password_hash, password_salt, user["id"]),
                 )
+        conn.execute(
+            "UPDATE users SET role = ? WHERE upper(role) = ?",
+            (OPERATIONAL_ROLE, LEGACY_AGENT_ROLE),
+        )
         conn.commit()
 
 
@@ -332,7 +374,8 @@ def authenticate_user(identifier: str | None, password: str | None) -> dict | No
     ensure_demo_users()
     user = row(
         """
-        SELECT id, company_id, first_name, last_name, username, email, role, status, password_hash, password_salt
+        SELECT id, company_id, first_name, last_name, username, email, role, status,
+               must_change_password, password_hash, password_salt
         FROM users
         WHERE (lower(email) = lower(?) OR lower(username) = lower(?)) AND status = 'ACTIVE'
         """,
@@ -343,7 +386,56 @@ def authenticate_user(identifier: str | None, password: str | None) -> dict | No
     expected, _salt = hash_password(password, user.get("password_salt") or "")
     if expected != user.get("password_hash"):
         return None
-    return {key: value for key, value in user.items() if key not in {"password_hash", "password_salt"}}
+    user = {key: value for key, value in user.items() if key not in {"password_hash", "password_salt"}}
+    user["role"] = normalize_role(user.get("role"))
+    user["must_change_password"] = bool(user.get("must_change_password"))
+    return user
+
+
+def change_user_password(user_id: str, current_password: str, new_password: str) -> dict:
+    if not current_password or not new_password:
+        raise ValueError("Current password and new password are required.")
+    if len(new_password) < 8:
+        raise ValueError("New password must be at least 8 characters.")
+    user = row(
+        """
+        SELECT id, company_id, first_name, last_name, username, email, phone, whatsapp,
+               role, status, password_hash, password_salt
+        FROM users
+        WHERE id = ? AND status = 'ACTIVE'
+        """,
+        (user_id,),
+    )
+    if not user:
+        raise ValueError("Active user not found.")
+    expected, _salt = hash_password(current_password, user.get("password_salt") or "")
+    if expected != user.get("password_hash"):
+        raise ValueError("Current password is not correct.")
+    password_hash, password_salt = hash_password(new_password)
+    execute(
+        """
+        UPDATE users
+        SET password_hash = ?,
+            password_salt = ?,
+            must_change_password = 0,
+            password_changed_at = ?
+        WHERE id = ?
+        """,
+        (password_hash, password_salt, now_iso(), user_id),
+    )
+    notify("PASSWORD_CHANGED", f"Password changed for {user.get('email')}.", user_id, user.get("company_id") or DEMO_COMPANY_ID)
+    audit("CHANGE_PASSWORD", "user", user_id, company_id=user.get("company_id") or DEMO_COMPANY_ID)
+    updated = row(
+        """
+        SELECT id, company_id, first_name, last_name, username, email, phone, whatsapp,
+               role, status, must_change_password
+        FROM users WHERE id = ?
+        """,
+        (user_id,),
+    ) or {}
+    updated["role"] = normalize_role(updated.get("role"))
+    updated["must_change_password"] = bool(updated.get("must_change_password"))
+    return updated
 
 
 def notify(event_type: str, message: str, related_entity_id: str | None = None, company_id: str = DEMO_COMPANY_ID) -> None:
@@ -356,18 +448,78 @@ def notify(event_type: str, message: str, related_entity_id: str | None = None, 
     )
 
 
-def audit(action_type: str, entity_type: str, entity_id: str, details: str = "", company_id: str = DEMO_COMPANY_ID) -> None:
+def audit(
+    action_type: str,
+    entity_type: str,
+    entity_id: str,
+    details: str = "",
+    company_id: str = DEMO_COMPANY_ID,
+    user_id: str | None = None,
+    ip_address: str | None = None,
+) -> None:
+    actor = user_id or DEMO_USER_ID
+    ip = ip_address
+    try:
+        from flask import has_request_context
+
+        if has_request_context():
+            from services import auth
+
+            actor = user_id or auth.current_user_id()
+            ip = ip_address or auth._client_ip()
+    except Exception:
+        pass
     execute(
         """
-        INSERT INTO audit_events (id, company_id, user_id, action_type, entity_type, entity_id, details)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO audit_events (id, company_id, user_id, action_type, entity_type, entity_id, details, ip_address)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (new_id("audit"), company_id, DEMO_USER_ID, action_type, entity_type, entity_id, details),
+        (new_id("audit"), company_id, actor, action_type, entity_type, entity_id, details, ip),
     )
 
 
 def get_company(company_id: str = DEMO_COMPANY_ID) -> dict:
     return row("SELECT * FROM companies WHERE id = ?", (company_id,)) or {}
+
+
+def update_registry_company(company_id: str, name: str, company_email: str = "", phone: str = "") -> dict:
+    existing = get_company(company_id)
+    if not existing:
+        raise ValueError("Select a valid CFA company.")
+    if not name:
+        raise ValueError("Company name is required.")
+    execute(
+        "UPDATE companies SET name = ?, company_email = ?, phone = ? WHERE id = ?",
+        (name.strip(), (company_email or "").strip().lower(), (phone or "").strip(), company_id),
+    )
+    notify("COMPANY_UPDATED", f"CFA registry details were updated for {name}.", company_id, company_id)
+    audit("UPDATE_REGISTRY_COMPANY", "company", company_id, company_id=company_id)
+    return get_company(company_id)
+
+
+def set_registry_company_status(company_id: str, status: str) -> dict:
+    existing = get_company(company_id)
+    if not existing:
+        raise ValueError("Select a valid CFA company.")
+    normalized = (status or "").strip().upper()
+    if normalized not in {"APPROVED", "SUSPENDED", "PENDING_APPROVAL"}:
+        raise ValueError("Company status must be Approved, Suspended, or Pending Approval.")
+    approved_at = now_iso() if normalized == "APPROVED" else existing.get("approved_at")
+    execute("UPDATE companies SET status = ?, approved_at = ? WHERE id = ?", (normalized, approved_at, company_id))
+    verb = {"APPROVED": "activated", "SUSPENDED": "suspended", "PENDING_APPROVAL": "moved to pending approval"}[normalized]
+    notify("COMPANY_STATUS_CHANGED", f"CFA {existing.get('name')} was {verb}.", company_id, company_id)
+    audit("SET_REGISTRY_COMPANY_STATUS", "company", company_id, normalized, company_id=company_id)
+    return get_company(company_id)
+
+
+def delete_registry_company(company_id: str) -> None:
+    existing = get_company(company_id)
+    if not existing:
+        raise ValueError("Select a valid CFA company.")
+    if company_id == DEMO_COMPANY_ID:
+        raise ValueError("The default ZAFFA demo company cannot be deleted.")
+    audit("DELETE_REGISTRY_COMPANY", "company", company_id, existing.get("name") or "", company_id=company_id)
+    execute("DELETE FROM companies WHERE id = ?", (company_id,))
 
 
 def update_company_profile(company_id: str, payload: dict) -> dict:
@@ -425,6 +577,47 @@ def list_company_users(company_id: str = DEMO_COMPANY_ID) -> list[dict]:
     )
 
 
+def list_system_users(search: str | None = None) -> list[dict]:
+    query = """
+        SELECT u.id, u.company_id, c.name AS company_name, u.first_name, u.last_name,
+               u.username, u.email, u.phone, u.whatsapp, u.role, u.status, u.created_at
+        FROM users u
+        LEFT JOIN companies c ON c.id = u.company_id
+    """
+    params: list[Any] = []
+    if search:
+        q = f"%{search.strip()}%"
+        query += """
+            WHERE u.first_name LIKE ? OR u.last_name LIKE ? OR u.username LIKE ?
+               OR u.email LIKE ? OR u.role LIKE ? OR u.status LIKE ? OR c.name LIKE ?
+        """
+        params.extend([q, q, q, q, q, q, q])
+    query += """
+        ORDER BY
+          CASE u.role
+            WHEN 'SUPER_ADMIN' THEN 1
+            WHEN 'COMPANY_ADMIN' THEN 2
+            WHEN 'DECLARANT' THEN 3
+            ELSE 4
+          END,
+          u.created_at DESC
+    """
+    return rows(query, tuple(params))
+
+
+def get_system_user(user_id: str) -> dict:
+    return row(
+        """
+        SELECT u.id, u.company_id, c.name AS company_name, u.first_name, u.last_name,
+               u.username, u.email, u.phone, u.whatsapp, u.role, u.status, u.created_at
+        FROM users u
+        LEFT JOIN companies c ON c.id = u.company_id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    ) or {}
+
+
 def get_company_user(user_id: str, company_id: str = DEMO_COMPANY_ID) -> dict:
     return row(
         """
@@ -463,7 +656,7 @@ def update_company_user(
         SET first_name = ?, last_name = ?, email = ?, phone = ?, whatsapp = ?, role = ?
         WHERE id = ? AND company_id = ?
         """,
-        (first_name, last_name, email, phone, whatsapp, role or "DECLARANT", user_id, company_id),
+        (first_name, last_name, email, phone, whatsapp, normalize_role(role), user_id, company_id),
     )
     notify("USER_UPDATED", f"ZCAMS user {first_name} {last_name} was updated.", user_id, company_id)
     audit("UPDATE_COMPANY_USER", "user", user_id, company_id=company_id)
@@ -537,8 +730,8 @@ def create_company_user(
         """
         INSERT INTO users (
           id, company_id, first_name, last_name, username, email,
-          password_hash, password_salt, phone, whatsapp, role
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          password_hash, password_salt, must_change_password, phone, whatsapp, role
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             user_id,
@@ -549,44 +742,208 @@ def create_company_user(
             email,
             password_hash,
             password_salt,
+            1,
             phone,
             whatsapp,
-            role or "DECLARANT",
+            normalize_role(role),
         ),
     )
-    company = get_company(company_id)
-    login_url = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/") + "/login"
     contact_name = f"{first_name} {last_name}".strip()
-    subject, text, html = onboarding_approval_email(
-        company_name=company.get("name") or "Your company",
-        contact_name=contact_name,
-        to_email=email,
-        username=username,
-        password=password,
-        login_url=login_url,
-    )
-    email_result = send_email(
-        email,
-        subject.replace("Approved", "Agent access created"),
-        text,
-        html=html,
-        recipient_name=contact_name,
-        description=f"ZCAMS agent login — {company.get('name')}",
-    )
+    registration_email = email_new_user_registration(user_id, password)
+    email_result = registration_email["email_result"]
     notify("USER_CREATED", f"ZCAMS login created for {contact_name} ({email}).", user_id, company_id)
     if email_result.get("sent"):
         notify("CREDENTIALS_EMAILED", f"Login credentials emailed to {email}.", user_id, company_id)
     audit("CREATE_COMPANY_USER", "user", user_id, company_id=company_id)
     user = row(
         """
-        SELECT id, company_id, first_name, last_name, username, email, phone, whatsapp, role, status, created_at
+        SELECT id, company_id, first_name, last_name, username, email, phone, whatsapp,
+               role, status, must_change_password, created_at
         FROM users WHERE id = ?
         """,
         (user_id,),
     ) or {}
-    user["temp_password"] = password
+    user["temp_password"] = registration_email["temp_password"]
+    user["must_change_password"] = bool(user.get("must_change_password"))
     user["email_result"] = email_result
     return user
+
+
+def create_system_user(
+    company_id: str,
+    first_name: str,
+    last_name: str,
+    email: str,
+    role: str,
+    phone: str = "",
+    whatsapp: str = "",
+    username: str = "",
+    password: str = "",
+) -> dict:
+    if not first_name or not last_name or not email:
+        raise ValueError("First name, last name, and email are required.")
+    if row("SELECT id FROM companies WHERE id = ?", (company_id,)) is None:
+        raise ValueError("Select a valid company for this user.")
+    normalized_role = normalize_role(role)
+    if normalized_role not in {"SUPER_ADMIN", "COMPANY_ADMIN", "DECLARANT"}:
+        raise ValueError("Role must be Super Admin, Company Admin, or Declarant.")
+    if row("SELECT id FROM users WHERE lower(email) = lower(?)", (email,)):
+        raise ValueError("A user with that email already exists.")
+    username = (username or "").strip().lower()
+    if not username:
+        username = re.sub(r"[^a-z0-9]+", ".", email.lower().split("@", 1)[0]).strip(".") or f"user-{uuid.uuid4().hex[:6]}"
+    base_username = username
+    counter = 2
+    while row("SELECT id FROM users WHERE lower(username) = lower(?)", (username,)):
+        username = f"{base_username}{counter}"
+        counter += 1
+    password = password or generate_temp_password()
+    password_hash, password_salt = hash_password(password)
+    user_id = new_id("user")
+    execute(
+        """
+        INSERT INTO users (
+          id, company_id, first_name, last_name, username, email,
+          password_hash, password_salt, must_change_password, phone, whatsapp, role
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            company_id,
+            first_name.strip(),
+            last_name.strip(),
+            username,
+            email.strip().lower(),
+            password_hash,
+            password_salt,
+            1,
+            phone,
+            whatsapp,
+            normalized_role,
+        ),
+    )
+    registration_email = email_new_user_registration(user_id, password)
+    email_result = registration_email["email_result"]
+    notify("USER_CREATED", f"Super Admin created {normalized_role.replace('_', ' ').title()} user {email}.", user_id, company_id)
+    if email_result.get("sent"):
+        notify("CREDENTIALS_EMAILED", f"Login credentials emailed to {email}.", user_id, company_id)
+    audit("CREATE_SYSTEM_USER", "user", user_id, normalized_role, company_id=company_id)
+    user = row(
+        """
+        SELECT u.id, u.company_id, c.name AS company_name, u.first_name, u.last_name,
+               u.username, u.email, u.phone, u.whatsapp, u.role, u.status,
+               u.must_change_password, u.created_at
+        FROM users u
+        LEFT JOIN companies c ON c.id = u.company_id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    ) or {}
+    user["temp_password"] = registration_email["temp_password"]
+    user["must_change_password"] = bool(user.get("must_change_password"))
+    user["email_result"] = email_result
+    return user
+
+
+def update_system_user(
+    user_id: str,
+    company_id: str,
+    first_name: str,
+    last_name: str,
+    email: str,
+    role: str,
+    phone: str = "",
+    username: str = "",
+) -> dict:
+    existing = get_system_user(user_id)
+    if not existing:
+        raise ValueError("Select a valid user to update.")
+    if not first_name or not last_name or not email:
+        raise ValueError("First name, last name, and email are required.")
+    if row("SELECT id FROM companies WHERE id = ?", (company_id,)) is None:
+        raise ValueError("Select a valid company for this user.")
+    normalized_role = normalize_role(role)
+    if normalized_role not in {"SUPER_ADMIN", "COMPANY_ADMIN", "DECLARANT"}:
+        raise ValueError("Role must be Super Admin, Company Admin, or Declarant.")
+    conflict = row("SELECT id FROM users WHERE lower(email) = lower(?) AND id != ?", (email, user_id))
+    if conflict:
+        raise ValueError("Another user already uses that email.")
+    username = (username or existing.get("username") or "").strip().lower()
+    if not username:
+        username = re.sub(r"[^a-z0-9]+", ".", email.lower().split("@", 1)[0]).strip(".")
+    username_conflict = row("SELECT id FROM users WHERE lower(username) = lower(?) AND id != ?", (username, user_id))
+    if username_conflict:
+        raise ValueError("Another user already uses that username.")
+    execute(
+        """
+        UPDATE users
+        SET company_id = ?, first_name = ?, last_name = ?, username = ?,
+            email = ?, phone = ?, role = ?
+        WHERE id = ?
+        """,
+        (
+            company_id,
+            first_name.strip(),
+            last_name.strip(),
+            username,
+            email.strip().lower(),
+            phone,
+            normalized_role,
+            user_id,
+        ),
+    )
+    notify("USER_UPDATED", f"Super Admin updated user {email}.", user_id, company_id)
+    audit("UPDATE_SYSTEM_USER", "user", user_id, normalized_role, company_id=company_id)
+    return get_system_user(user_id)
+
+
+def set_system_user_status(user_id: str, status: str) -> dict:
+    existing = get_system_user(user_id)
+    if not existing:
+        raise ValueError("Select a valid user to update.")
+    status = "SUSPENDED" if status == "SUSPENDED" else "ACTIVE"
+    if existing.get("role") == "SUPER_ADMIN" and status == "SUSPENDED":
+        active_super_admins = rows(
+            "SELECT id FROM users WHERE role = 'SUPER_ADMIN' AND status = 'ACTIVE' AND id != ?",
+            (user_id,),
+        )
+        if not active_super_admins:
+            raise ValueError("You cannot suspend the last active Super Admin.")
+    if existing.get("role") == "COMPANY_ADMIN" and status == "SUSPENDED":
+        active_company_admins = rows(
+            """
+            SELECT id FROM users
+            WHERE company_id = ? AND role = 'COMPANY_ADMIN' AND status = 'ACTIVE' AND id != ?
+            """,
+            (existing["company_id"], user_id),
+        )
+        if not active_company_admins:
+            raise ValueError("You cannot suspend the last active Company Admin for this company.")
+    execute("UPDATE users SET status = ? WHERE id = ?", (status, user_id))
+    verb = "suspended" if status == "SUSPENDED" else "activated"
+    notify("USER_STATUS_CHANGED", f"Super Admin {verb} user {existing.get('email')}.", user_id, existing["company_id"])
+    audit("SET_SYSTEM_USER_STATUS", "user", user_id, status, company_id=existing["company_id"])
+    return get_system_user(user_id)
+
+
+def delete_system_user(user_id: str) -> None:
+    existing = get_system_user(user_id)
+    if not existing:
+        raise ValueError("Select a valid user to delete.")
+    if existing.get("role") == "SUPER_ADMIN":
+        other_super_admins = rows("SELECT id FROM users WHERE role = 'SUPER_ADMIN' AND id != ?", (user_id,))
+        if not other_super_admins:
+            raise ValueError("You cannot delete the last Super Admin.")
+    if existing.get("role") == "COMPANY_ADMIN":
+        other_company_admins = rows(
+            "SELECT id FROM users WHERE company_id = ? AND role = 'COMPANY_ADMIN' AND id != ?",
+            (existing["company_id"], user_id),
+        )
+        if not other_company_admins:
+            raise ValueError("You cannot delete the last Company Admin for this company.")
+    execute("DELETE FROM users WHERE id = ?", (user_id,))
+    notify("USER_DELETED", f"Super Admin deleted user {existing.get('email')}.", user_id, existing["company_id"])
+    audit("DELETE_SYSTEM_USER", "user", user_id, company_id=existing["company_id"])
 
 
 def create_onboarding(payload: dict, documents: list[dict] | None = None) -> dict:
@@ -701,6 +1058,55 @@ def generate_temp_password() -> str:
     return f"ZCAMS-{secrets.token_urlsafe(8)}"
 
 
+def email_new_user_registration(user_id: str, temp_password: str | None = None) -> dict:
+    user = row(
+        """
+        SELECT u.id, u.company_id, c.name AS company_name, u.first_name, u.last_name,
+               u.username, u.email, u.role
+        FROM users u
+        LEFT JOIN companies c ON c.id = u.company_id
+        WHERE u.id = ?
+        """,
+        (user_id,),
+    )
+    if not user:
+        raise ValueError("User not found.")
+    password = temp_password or generate_temp_password()
+    if temp_password is None:
+        password_hash, password_salt = hash_password(password)
+        execute(
+            """
+            UPDATE users
+            SET password_hash = ?, password_salt = ?, must_change_password = 1
+            WHERE id = ?
+            """,
+            (password_hash, password_salt, user_id),
+        )
+    company_name = user.get("company_name") or "Your company"
+    contact_name = f"{user.get('first_name') or ''} {user.get('last_name') or ''}".strip() or user.get("email")
+    login_url = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/") + "/login"
+    subject, text, html = new_user_registration_email(
+        company_name=company_name,
+        contact_name=contact_name,
+        to_email=user["email"],
+        role_label=normalize_role(user.get("role")).replace("_", " ").title(),
+        username=user.get("username") or user["email"],
+        password=password,
+        login_url=login_url,
+    )
+    email_result = send_new_user_registration_email(
+        user["email"],
+        subject,
+        text,
+        html=html,
+        recipient_name=contact_name,
+        description=f"ZCAMS new user registration - {company_name}",
+    )
+    if email_result.get("sent"):
+        notify("CREDENTIALS_EMAILED", f"Login credentials emailed to {user['email']}.", user_id, user["company_id"])
+    return {"email_result": email_result, "temp_password": password}
+
+
 def approve_company(company_id: str) -> dict:
     company = get_company(company_id)
     if not company:
@@ -716,7 +1122,11 @@ def approve_company(company_id: str) -> dict:
         (now_iso(), company_id),
     )
     execute(
-        "UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?",
+        """
+        UPDATE users
+        SET password_hash = ?, password_salt = ?, must_change_password = 1
+        WHERE id = ?
+        """,
         (password_hash, password_salt, admin_user["id"]),
     )
 
@@ -756,7 +1166,49 @@ def approve_company(company_id: str) -> dict:
     }
 
 
-def dashboard_stats() -> dict:
+def dashboard_stats(company_id: str | None = None) -> dict:
+    """Platform-wide stats when company_id is None; tenant-scoped when provided."""
+    if company_id:
+        return {
+            "companies": 1,
+            "bls": row("SELECT COUNT(*) AS count FROM bills_of_lading WHERE company_id = ?", (company_id,))["count"],
+            "reviewed": row(
+                """
+                SELECT COUNT(*) AS count FROM reviewed_bls rb
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE bl.company_id = ?
+                """,
+                (company_id,),
+            )["count"],
+            "active_zsads": row(
+                """
+                SELECT COUNT(*) AS count FROM z_sads zs
+                JOIN bills_of_lading bl ON bl.id = zs.bl_id
+                WHERE zs.is_active = 1 AND bl.company_id = ?
+                """,
+                (company_id,),
+            )["count"],
+            "outstanding_invoices": row(
+                """
+                SELECT COUNT(*) AS count FROM invoices inv
+                JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE inv.status != 'SETTLED' AND bl.company_id = ?
+                """,
+                (company_id,),
+            )["count"],
+            "settled_payments": row(
+                """
+                SELECT COUNT(*) AS count FROM payments pay
+                JOIN invoices inv ON inv.id = pay.invoice_id
+                JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE pay.status = 'SETTLED' AND bl.company_id = ?
+                """,
+                (company_id,),
+            )["count"],
+            **nav_counts(company_id),
+        }
     return {
         "companies": row("SELECT COUNT(*) AS count FROM companies")["count"],
         "bls": row("SELECT COUNT(*) AS count FROM bills_of_lading")["count"],
@@ -768,8 +1220,160 @@ def dashboard_stats() -> dict:
     }
 
 
-def nav_counts() -> dict:
+def admin_dashboard_summary(company_id: str = DEMO_COMPANY_ID) -> dict:
+    """Company Admin command-centre counters and readiness signals."""
+    stats = dashboard_stats(company_id)
+    users = list_company_users(company_id)
+    certificates = list_certificates(company_id)
+    company = get_company(company_id)
+    required_fields = [
+        ("pacra_number", "PACRA"),
+        ("tpin", "TPIN"),
+        ("zra_licence", "ZRA Licence"),
+        ("company_email", "Company Email"),
+        ("phone", "Phone"),
+        ("bank_name", "Bank Name"),
+        ("account_number", "Account Number"),
+        ("account_holder", "Account Holder"),
+    ]
+    missing_fields = [label for field, label in required_fields if not company.get(field)]
+    active_users = sum(1 for user in users if user.get("status") == "ACTIVE")
+    suspended_users = sum(1 for user in users if user.get("status") == "SUSPENDED")
+    company_admins = sum(1 for user in users if user.get("role") == "COMPANY_ADMIN")
+    declarants = sum(1 for user in users if user.get("role") == "DECLARANT")
+    open_tickets = row(
+        "SELECT COUNT(*) AS count FROM support_tickets WHERE company_id = ? AND status != 'Resolved'",
+        (company_id,),
+    )["count"]
+    signed_contracts = row(
+        "SELECT COUNT(*) AS count FROM contracts WHERE company_id = ? AND status = 'SIGNED'",
+        (company_id,),
+    )["count"]
+    draft_contracts = count_unedited_contracts(company_id)
+    return {
+        **stats,
+        "company_name": company.get("name") or company_id,
+        "company_status": company.get("status") or "-",
+        "compliance_score": compliance_score(company_id),
+        "certificates": len(certificates),
+        "missing_fields": missing_fields,
+        "banking_ready": all(company.get(field) for field in ("bank_name", "account_number", "account_holder")),
+        "active_users": active_users,
+        "suspended_users": suspended_users,
+        "company_admins": company_admins,
+        "declarants": declarants,
+        "open_tickets": open_tickets,
+        "signed_contracts": signed_contracts,
+        "draft_contracts": draft_contracts,
+    }
+
+
+def admin_workflow_rows(company_id: str = DEMO_COMPANY_ID, limit: int = 50) -> list[dict]:
+    return rows(
+        """
+        SELECT
+          bl.id AS bl_id,
+          bl.bl_number,
+          bl.status AS bl_status,
+          bl.uploaded_at,
+          bl.consignee_name,
+          rb.id AS reviewed_id,
+          rb.status AS reviewed_status,
+          rb.reviewed_at,
+          zs.z_sad_number,
+          inv.invoice_number,
+          inv.status AS invoice_status,
+          inv.total,
+          pay.status AS payment_status,
+          pay.settled_at
+        FROM bills_of_lading bl
+        LEFT JOIN reviewed_bls rb ON rb.bl_id = bl.id
+        LEFT JOIN z_sads zs ON zs.id = rb.z_sad_id
+        LEFT JOIN invoices inv ON inv.reviewed_bl_id = rb.id
+        LEFT JOIN payments pay ON pay.invoice_id = inv.id
+        WHERE bl.company_id = ?
+        ORDER BY bl.uploaded_at DESC
+        LIMIT ?
+        """,
+        (company_id, limit),
+    )
+
+
+def admin_contract_rows(company_id: str = DEMO_COMPANY_ID, limit: int = 25) -> list[dict]:
+    return rows(
+        """
+        SELECT id, contract_no, importer_name, importer_email, status, created_at, signed_at
+        FROM contracts
+        WHERE company_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+        """,
+        (company_id, limit),
+    )
+
+
+def admin_recent_audit_rows(company_id: str = DEMO_COMPANY_ID, limit: int = 20) -> list[dict]:
+    return rows(
+        """
+        SELECT a.*, u.first_name, u.last_name, u.email AS actor_email
+        FROM audit_events a
+        LEFT JOIN users u ON u.id = a.user_id
+        WHERE a.company_id = ? OR a.company_id IS NULL
+        ORDER BY a.created_at DESC
+        LIMIT ?
+        """,
+        (company_id, limit),
+    )
+
+
+def nav_counts(company_id: str | None = None) -> dict:
     """Counts for sidebar badges and dashboard shortcuts."""
+    if company_id:
+        return {
+            "bls_pending": row(
+                "SELECT COUNT(*) AS count FROM bills_of_lading WHERE status = 'UPLOADED' AND company_id = ?",
+                (company_id,),
+            )["count"],
+            "reviewed_invoice_ready": row(
+                """
+                SELECT COUNT(*) AS count FROM reviewed_bls rb
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE bl.company_id = ? AND rb.status IN ('REVIEWED_ZSAD_ISSUED', 'AWAITING_PAYMENT')
+                """,
+                (company_id,),
+            )["count"],
+            "outstanding_invoices": row(
+                """
+                SELECT COUNT(*) AS count FROM invoices inv
+                JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE inv.status != 'SETTLED' AND bl.company_id = ?
+                """,
+                (company_id,),
+            )["count"],
+            "checkout_pending": row(
+                """
+                SELECT COUNT(*) AS count FROM invoices inv
+                JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE inv.status = 'AWAITING_PAYMENT' AND bl.company_id = ?
+                """,
+                (company_id,),
+            )["count"],
+            "release_pending": row(
+                """
+                SELECT COUNT(*) AS count FROM reviewed_bls rb
+                JOIN bills_of_lading bl ON bl.id = rb.bl_id
+                WHERE bl.company_id = ? AND rb.status = 'SETTLED_RELEASE_PENDING'
+                """,
+                (company_id,),
+            )["count"],
+            "pending_companies": 0,
+            "notifications_unread": row(
+                "SELECT COUNT(*) AS count FROM notifications WHERE is_read = 0 AND company_id = ?",
+                (company_id,),
+            )["count"],
+        }
     return {
         "bls_pending": row("SELECT COUNT(*) AS count FROM bills_of_lading WHERE status = 'UPLOADED'")["count"],
         "reviewed_invoice_ready": row(
@@ -1189,7 +1793,7 @@ def list_z_sad_history(reviewed_bl_id: str) -> list[dict]:
                ) AS invoice_count
         FROM z_sads zs
         WHERE zs.reviewed_bl_id = ?
-        ORDER BY zs.generated_at DESC
+        ORDER BY zs.is_active DESC, zs.generated_at DESC, zs.id DESC
         """,
         (reviewed_bl_id,),
     )
@@ -2466,16 +3070,24 @@ def sign_contract_with_otp(
     return get_contract(contract["id"]) or {}
 
 
-def create_support_ticket(subject: str, description: str, linked_module: str, priority: str) -> dict:
+def create_support_ticket(
+    subject: str,
+    description: str,
+    linked_module: str,
+    priority: str,
+    *,
+    company_id: str = DEMO_COMPANY_ID,
+    user_id: str = DEMO_USER_ID,
+) -> dict:
     ticket_id = new_id("ticket")
     execute(
         """
         INSERT INTO support_tickets (id, company_id, subject, description, linked_module, priority, created_by)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (ticket_id, DEMO_COMPANY_ID, subject, description, linked_module, priority, DEMO_USER_ID),
+        (ticket_id, company_id, subject, description, linked_module, priority, user_id),
     )
-    notify("SUPPORT_TICKET_CREATED", f"Support ticket '{subject}' created.", ticket_id)
+    notify("SUPPORT_TICKET_CREATED", f"Support ticket '{subject}' created.", ticket_id, company_id)
     return row("SELECT * FROM support_tickets WHERE id = ?", (ticket_id,)) or {}
 
 
@@ -2484,10 +3096,109 @@ def update_ticket_status(ticket_id: str, status: str) -> None:
     execute("UPDATE support_tickets SET status = ?, resolved_at = ? WHERE id = ?", (status, resolved_at, ticket_id))
 
 
-def list_support_tickets() -> list[dict]:
-    return rows("SELECT * FROM support_tickets ORDER BY created_at DESC")
+def list_support_tickets(company_id: str | None = None, search: str | None = None) -> list[dict]:
+    query = """
+        SELECT st.*, c.name AS company_name, u.email AS created_by_email
+        FROM support_tickets st
+        LEFT JOIN companies c ON c.id = st.company_id
+        LEFT JOIN users u ON u.id = st.created_by
+    """
+    filters: list[str] = []
+    params: list[Any] = []
+    if company_id is not None:
+        filters.append("st.company_id = ?")
+        params.append(company_id)
+    if search:
+        q = f"%{search.strip()}%"
+        filters.append(
+            "(st.subject LIKE ? OR st.description LIKE ? OR st.linked_module LIKE ? OR st.priority LIKE ? OR st.status LIKE ? OR c.name LIKE ?)"
+        )
+        params.extend([q, q, q, q, q, q])
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
+    query += " ORDER BY st.created_at DESC"
+    return rows(query, tuple(params))
 
 
-def chat_answer(question: str, history: list[dict] | None = None) -> str:
+def classify_chat_response(question: str, answer: str, mode: str | None = None) -> str:
+    text = (answer or "").lower()
+    if "zcams will not answer" in text or "i do not know and i do not have any idea" in text:
+        return "Bad Response"
+    if mode in {"faq", "tutorial", "retrieval", "local-model"} and len((answer or "").strip()) >= 24:
+        return "Good Response"
+    if "please use the relevant zcams module" in text or "raise a support ticket" in text:
+        return "Neutral Response"
+    if mode in {"fallback", "governed"}:
+        return "Neutral Response"
+    return "Neutral Response"
+
+
+def record_chat_event(question: str, answer: str, mode: str, quality: str, user: dict | None = None) -> dict:
+    event_id = new_id("chat")
+    user = user or {}
+    execute(
+        """
+        INSERT INTO chat_events (id, company_id, user_id, question, answer, mode, quality)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            event_id,
+            user.get("company_id") or DEMO_COMPANY_ID,
+            user.get("id") or DEMO_USER_ID,
+            question,
+            answer,
+            mode,
+            quality,
+        ),
+    )
+    return row("SELECT * FROM chat_events WHERE id = ?", (event_id,)) or {}
+
+
+def list_chat_events(search: str | None = None, limit: int = 250) -> list[dict]:
+    query = """
+        SELECT ce.*, c.name AS company_name, u.email AS user_email, u.role AS user_role
+        FROM chat_events ce
+        LEFT JOIN companies c ON c.id = ce.company_id
+        LEFT JOIN users u ON u.id = ce.user_id
+    """
+    params: list[Any] = []
+    if search:
+        q = f"%{search.strip()}%"
+        query += " WHERE ce.question LIKE ? OR ce.answer LIKE ? OR ce.mode LIKE ? OR ce.quality LIKE ? OR c.name LIKE ? OR u.email LIKE ?"
+        params.extend([q, q, q, q, q, q])
+    query += " ORDER BY ce.created_at DESC LIMIT ?"
+    params.append(int(limit))
+    return rows(query, tuple(params))
+
+
+def save_chat_context_upload(filename: str, contents: str, user: dict | None = None) -> dict:
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename or "zcams-chat-context.txt").strip("._") or "zcams-chat-context.txt"
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in {".txt", ".md", ".docx"}:
+        raise ValueError("Upload TXT, MD, or DOCX context files only.")
+    try:
+        _prefix, encoded = (contents or "").split(",", 1)
+        data = base64.b64decode(encoded)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Could not read the uploaded context file.") from exc
+    if not data:
+        raise ValueError("Uploaded context file is empty.")
+    if len(data) > 2_000_000:
+        raise ValueError("Context upload is too large. Use a file below 2 MB.")
+    context_dir = UPLOAD_DIR / "chat-context"
+    context_dir.mkdir(parents=True, exist_ok=True)
+    output_name = f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}_{safe_name}"
+    output_path = context_dir / output_name
+    output_path.write_bytes(data)
+    clear_document_cache()
+    audit("UPLOAD_CHAT_CONTEXT", "chat_context", output_name, company_id=(user or {}).get("company_id") or DEMO_COMPANY_ID)
+    return {"file_name": safe_name, "stored_as": output_name, "size": len(data), "path": str(output_path)}
+
+
+def chat_answer(question: str, history: list[dict] | None = None, user: dict | None = None) -> str:
     result = answer_question(question, history=history)
-    return result["answer"]
+    answer = result["answer"]
+    mode = result.get("mode") or "unknown"
+    quality = classify_chat_response(question, answer, mode)
+    record_chat_event(question, answer, mode, quality, user=user)
+    return answer

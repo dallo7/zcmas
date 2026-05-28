@@ -31,6 +31,62 @@ def init_db() -> None:
         _migrate_bl_cancel(conn)
         _migrate_companies(conn)
         _migrate_contracts(conn)
+        _migrate_auth(conn)
+        _migrate_chat_events(conn)
+
+
+def _migrate_chat_events(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS chat_events (
+          id TEXT PRIMARY KEY,
+          company_id TEXT,
+          user_id TEXT,
+          question TEXT NOT NULL,
+          answer TEXT NOT NULL,
+          mode TEXT,
+          quality TEXT NOT NULL DEFAULT 'Neutral Response',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE SET NULL,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_chat_events_created ON chat_events(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_chat_events_quality ON chat_events(quality);
+        """
+    )
+    conn.commit()
+
+
+def _migrate_auth(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS user_sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          session_token TEXT NOT NULL UNIQUE,
+          ip_address TEXT,
+          user_agent TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          expires_at TEXT NOT NULL,
+          revoked_at TEXT,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(session_token);
+        CREATE TABLE IF NOT EXISTS login_events (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          email TEXT,
+          success INTEGER NOT NULL DEFAULT 0,
+          ip_address TEXT,
+          user_agent TEXT,
+          failure_reason TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_login_events_created ON login_events(created_at DESC);
+        """
+    )
+    conn.commit()
 
 
 def _migrate_users(conn: sqlite3.Connection) -> None:
@@ -39,6 +95,8 @@ def _migrate_users(conn: sqlite3.Connection) -> None:
         "username": "ALTER TABLE users ADD COLUMN username TEXT",
         "password_hash": "ALTER TABLE users ADD COLUMN password_hash TEXT",
         "password_salt": "ALTER TABLE users ADD COLUMN password_salt TEXT",
+        "must_change_password": "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0",
+        "password_changed_at": "ALTER TABLE users ADD COLUMN password_changed_at TEXT",
     }
     for column, statement in migrations.items():
         if column not in existing:

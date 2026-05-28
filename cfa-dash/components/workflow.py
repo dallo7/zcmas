@@ -130,5 +130,5 @@ def nav_badge(count: int, tone: str = "warn") -> html.Span | None:
     return html.Span(display, className=f"nav-badge nav-badge-{tone}")
 
 
-def counts_for_nav() -> dict:
-    return repository.nav_counts()
+def counts_for_nav(company_id: str | None = None) -> dict:
+    return repository.nav_counts(company_id)

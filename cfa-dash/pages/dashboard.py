@@ -1,28 +1,32 @@
-from dash import dcc, html, register_page
+from dash import Input, Output, callback, dcc, html, register_page
 
 from components.icons import icon
 from components.layout import header
 from components.ui import metric_card_link
 from components.workflow import shortcut_chip
-from services import repository
+from services import auth, repository
 
 
 register_page(__name__, path="/dashboard", name="Dashboard")
 
 
+def _stats_for_user(user: dict | None) -> dict:
+    if not user:
+        return repository.dashboard_stats()
+    if user.get("role") == auth.ROLE_SUPER_ADMIN:
+        return repository.dashboard_stats()
+    return repository.dashboard_stats(user.get("company_id"))
+
+
+def _notifications_for_user(user: dict | None) -> list[dict]:
+    if not user:
+        return repository.list_notifications(limit=10)
+    if user.get("role") == auth.ROLE_SUPER_ADMIN:
+        return repository.list_notifications(limit=10, company_id=None)
+    return repository.list_notifications(limit=10, company_id=user.get("company_id"))
+
+
 def layout(**_kwargs):
-    stats = repository.dashboard_stats()
-    notifications = repository.list_notifications(limit=10)
-    shortcuts = [
-        shortcut_chip("Upload BL", "/bls", "lucide:file-up", "primary"),
-        shortcut_chip("Review & Z-SAD", "/reviewed-bl#active-reviewed-bls", "lucide:file-check-2"),
-        shortcut_chip("Request Invoice", "/reviewed-bl#active-reviewed-bls", "lucide:receipt"),
-    ]
-    if stats.get("outstanding_invoices"):
-        shortcuts.append(shortcut_chip("Pay now", "/checkout", "lucide:credit-card", "accent"))
-    shortcuts.append(shortcut_chip("Invoice register", "/invoices", "lucide:list"))
-    if stats.get("release_pending"):
-        shortcuts.append(shortcut_chip("Issue release", "/reviewed-bl#active-reviewed-bls", "lucide:package-check", "accent"))
     return html.Div(
         [
             header(
@@ -33,50 +37,9 @@ def layout(**_kwargs):
             ),
             html.Div(
                 [
-                    html.Div(shortcuts, className="shortcut-row"),
-                    html.Div(
-                        [
-                            metric_card_link("BLs Uploaded", stats["bls"], "var(--zambia-green)", "/bls"),
-                            metric_card_link("Reviewed BLs", stats["reviewed"], "var(--zambia-orange)", "/reviewed-bl#active-reviewed-bls"),
-                            metric_card_link("Active Z-SADs", stats["active_zsads"], "var(--zambia-yellow)", "/reviewed-bl#active-reviewed-bls"),
-                            metric_card_link(
-                                "Outstanding Invoices",
-                                stats["outstanding_invoices"],
-                                "var(--zambia-red)",
-                                "/checkout",
-                            ),
-                            metric_card_link("Settled Payments", stats["settled_payments"], "var(--zambia-green)", "/invoices"),
-                        ],
-                        className="dashboard-grid",
-                    ),
-                    html.Div(
-                        [
-                            _updates_panel(stats),
-                            html.Div(
-                                [
-                                    html.H2("Recent Notifications"),
-                                    html.Div(
-                                        [
-                                            html.Div(
-                                                [
-                                                    html.Strong(note["event_type"].replace("_", " ").title()),
-                                                    html.P(note["message"], className="muted"),
-                                                ],
-                                                className="notification-item",
-                                            )
-                                            for note in notifications
-                                        ]
-                                        or [html.Div("No notifications yet.", className="muted")]
-                                        ,
-                                        className="dashboard-notification-list",
-                                    ),
-                                    dcc.Link("View all notifications", href="/notifications", className="text-link"),
-                                ],
-                                className="card section-card dashboard-notifications-card",
-                            ),
-                        ],
-                        className="two-column dashboard-panels",
-                    ),
+                    html.Div(id="dashboard-shortcuts", className="shortcut-row"),
+                    html.Div(id="dashboard-metrics", className="dashboard-grid"),
+                    html.Div(id="dashboard-panels", className="two-column dashboard-panels"),
                     html.Div(
                         [
                             html.Span("Keyboard: "),
@@ -96,6 +59,60 @@ def layout(**_kwargs):
             ),
         ]
     )
+
+
+@callback(
+    Output("dashboard-shortcuts", "children"),
+    Output("dashboard-metrics", "children"),
+    Output("dashboard-panels", "children"),
+    Input("auth-user", "data"),
+    prevent_initial_call=False,
+)
+def refresh_dashboard(user):
+    stats = _stats_for_user(user)
+    notifications = _notifications_for_user(user)
+    shortcuts = [
+        shortcut_chip("Upload BL", "/bls", "lucide:file-up", "primary"),
+        shortcut_chip("Review & Z-SAD", "/reviewed-bl#active-reviewed-bls", "lucide:file-check-2"),
+        shortcut_chip("Request Invoice", "/reviewed-bl#active-reviewed-bls", "lucide:receipt"),
+    ]
+    if stats.get("outstanding_invoices"):
+        shortcuts.append(shortcut_chip("Pay now", "/checkout", "lucide:credit-card", "accent"))
+    shortcuts.append(shortcut_chip("Invoice register", "/invoices", "lucide:list"))
+    if stats.get("release_pending"):
+        shortcuts.append(shortcut_chip("Issue release", "/reviewed-bl#active-reviewed-bls", "lucide:package-check", "accent"))
+    metrics = [
+        metric_card_link("BLs Uploaded", stats["bls"], "var(--zambia-green)", "/bls"),
+        metric_card_link("Reviewed BLs", stats["reviewed"], "var(--zambia-orange)", "/reviewed-bl#active-reviewed-bls"),
+        metric_card_link("Active Z-SADs", stats["active_zsads"], "var(--zambia-yellow)", "/reviewed-bl#active-reviewed-bls"),
+        metric_card_link("Outstanding Invoices", stats["outstanding_invoices"], "var(--zambia-red)", "/checkout"),
+        metric_card_link("Settled Payments", stats["settled_payments"], "var(--zambia-green)", "/invoices"),
+    ]
+    panels = [
+        _updates_panel(stats),
+        html.Div(
+            [
+                html.H2("Recent Notifications"),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Strong(note["event_type"].replace("_", " ").title()),
+                                html.P(note["message"], className="muted"),
+                            ],
+                            className="notification-item",
+                        )
+                        for note in notifications
+                    ]
+                    or [html.Div("No notifications yet.", className="muted")],
+                    className="dashboard-notification-list",
+                ),
+                dcc.Link("View all notifications", href="/notifications", className="text-link"),
+            ],
+            className="card section-card dashboard-notifications-card",
+        ),
+    ]
+    return shortcuts, metrics, panels
 
 
 def _updates_panel(stats: dict):

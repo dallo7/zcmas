@@ -39,6 +39,8 @@ def layout(**_kwargs):
             html.Div(id="profile-action-result"),
             dcc.Store(id="profile-edit-user-id"),
             dcc.Store(id="profile-pending-user-action"),
+            dcc.Store(id="profile-users-page", data=1),
+            dcc.Store(id="profile-docs-page", data=1),
             html.Div(
                 html.Div(
                     [
@@ -190,45 +192,7 @@ def _profile_content(company: dict, certs: list[dict], users: list[dict], score:
                     ],
                     className="section-heading-block",
                 ),
-                status_table(
-                    ["Name", "Username", "Email", "Role", "Status", "Actions"],
-                    [
-                        [
-                            f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
-                            user.get("username") or "-",
-                            user.get("email") or "-",
-                            (user.get("role") or "-").replace("_", " ").title(),
-                            user.get("status") or "-",
-                            html.Div(
-                                [
-                                    html.Button(
-                                        icon("lucide:pencil", 17),
-                                        id={"type": "profile-user-edit", "id": user["id"]},
-                                        className="contract-action-icon edit",
-                                        type="button",
-                                        title="Edit user",
-                                    ),
-                                    html.Button(
-                                        icon("lucide:user-check" if user.get("status") == "SUSPENDED" else "lucide:user-x", 17),
-                                        id={"type": "profile-user-toggle", "id": user["id"]},
-                                        className="contract-action-icon activate" if user.get("status") == "SUSPENDED" else "contract-action-icon suspend",
-                                        type="button",
-                                        title="Activate user" if user.get("status") == "SUSPENDED" else "Suspend user",
-                                    ),
-                                    html.Button(
-                                        icon("lucide:trash-2", 17),
-                                        id={"type": "profile-user-delete", "id": user["id"]},
-                                        className="contract-action-icon delete",
-                                        type="button",
-                                        title="Delete user",
-                                    ),
-                                ],
-                                className="profile-action-row",
-                            ),
-                        ]
-                        for user in users
-                    ],
-                ),
+                html.Div(_profile_users_results(users, 1)[0], id="profile-users-results"),
             ],
             className="card section-card",
         ),
@@ -236,7 +200,7 @@ def _profile_content(company: dict, certs: list[dict], users: list[dict], score:
             [
                 html.H2("Create Agent / Declarant Login"),
                 html.P(
-                    "Create or edit the agent who will make declarations, generate Z-SADs, and request invoices. New-login credentials are sent to the email entered below.",
+                    "Create or edit the Declarant (Agent) who executes operational clearance only: BL upload, review, Z-SAD, invoice, checkout, and cargo release. New-login credentials are sent to the email entered below.",
                     className="muted section-lead",
                 ),
                 html.Div(
@@ -285,11 +249,91 @@ def _profile_content(company: dict, certs: list[dict], users: list[dict], score:
                     ],
                     className="form-grid profile-document-upload-grid",
                 ),
-                html.Div(_profile_documents_table(certs), className="document-table-wrap"),
+                html.Div(_profile_documents_results(certs, 1)[0], id="profile-docs-results"),
             ],
             className="card section-card stack",
         ),
     ]
+
+
+TABLE_PAGE_SIZE = 8
+
+
+def _page_rows(rows: list[dict], page: int | None) -> tuple[list[dict], int, int]:
+    total_pages = max(1, ((len(rows) - 1) // TABLE_PAGE_SIZE) + 1)
+    current = max(1, min(int(page or 1), total_pages))
+    start = (current - 1) * TABLE_PAGE_SIZE
+    return rows[start : start + TABLE_PAGE_SIZE], current, total_pages
+
+
+def _pagination_controls(prefix: str, total_rows: int, page: int, total_pages: int | None = None):
+    total_pages = total_pages or max(1, ((total_rows - 1) // TABLE_PAGE_SIZE) + 1)
+    return html.Div(
+        [
+            html.Button("Previous", id=f"{prefix}-prev", className="btn-secondary compact", type="button", disabled=page <= 1),
+            html.Span(f"Page {page} of {total_pages} | {total_rows} records", className="muted"),
+            html.Button("Next", id=f"{prefix}-next", className="btn-secondary compact", type="button", disabled=page >= total_pages),
+        ],
+        className="table-pagination",
+    )
+
+
+def _result_status(label: str, visible_count: int, total_count: int) -> str:
+    return f"Showing {visible_count} of {total_count} {label}"
+
+
+def _profile_users_table(users: list[dict]):
+    return status_table(
+        ["Name", "Username", "Email", "Role", "Status", "Actions"],
+        [
+            [
+                f"{user.get('first_name', '')} {user.get('last_name', '')}".strip(),
+                user.get("username") or "-",
+                user.get("email") or "-",
+                (user.get("role") or "-").replace("_", " ").title(),
+                user.get("status") or "-",
+                html.Div(
+                    [
+                        html.Button(
+                            icon("lucide:pencil", 17),
+                            id={"type": "profile-user-edit", "id": user["id"]},
+                            className="contract-action-icon edit",
+                            type="button",
+                            title="Edit user",
+                        ),
+                        html.Button(
+                            icon("lucide:user-check" if user.get("status") == "SUSPENDED" else "lucide:user-x", 17),
+                            id={"type": "profile-user-toggle", "id": user["id"]},
+                            className="contract-action-icon activate" if user.get("status") == "SUSPENDED" else "contract-action-icon suspend",
+                            type="button",
+                            title="Activate user" if user.get("status") == "SUSPENDED" else "Suspend user",
+                        ),
+                        html.Button(
+                            icon("lucide:trash-2", 17),
+                            id={"type": "profile-user-delete", "id": user["id"]},
+                            className="contract-action-icon delete",
+                            type="button",
+                            title="Delete user",
+                        ),
+                    ],
+                    className="profile-action-row",
+                ),
+            ]
+            for user in users
+        ],
+    )
+
+
+def _profile_users_results(users: list[dict], page: int | None):
+    visible, current_page, total_pages = _page_rows(users, page)
+    return (
+        [
+            html.Div(_result_status("users", len(visible), len(users)), className="muted table-filter-status"),
+            html.Div(_profile_users_table(visible), className="document-table-wrap"),
+            _pagination_controls("profile-users", len(users), current_page, total_pages),
+        ],
+        current_page,
+    )
 
 
 def _profile_documents_table(certs: list[dict]):
@@ -336,6 +380,18 @@ def _profile_documents_table(certs: list[dict]):
     )
 
 
+def _profile_documents_results(certs: list[dict], page: int | None):
+    visible, current_page, total_pages = _page_rows(certs, page)
+    return (
+        [
+            html.Div(_result_status("documents", len(visible), len(certs)), className="muted table-filter-status"),
+            html.Div(_profile_documents_table(visible), className="document-table-wrap"),
+            _pagination_controls("profile-docs", len(certs), current_page, total_pages),
+        ],
+        current_page,
+    )
+
+
 def _mail_popup_message(message: str, *, success: bool = True):
     return html.Div(message, className="notice success" if success else "notice error")
 
@@ -353,6 +409,17 @@ def _reset_user_form_outputs():
 def render_company_profile(pathname, user):
     if (pathname or "") != "/company-profile":
         raise PreventUpdate
+    from services import auth
+
+    if user and repository.normalize_role(user.get("role")) == auth.ROLE_DECLARANT:
+        return html.Div(
+            [
+                html.H2("Access restricted"),
+                html.P("Company profile and user management are available to Company Admins only.", className="muted"),
+                dcc.Link("Return to dashboard", href="/dashboard", className="btn-primary"),
+            ],
+            className="card section-card page-content",
+        )
     company_id = (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
     company = repository.get_company(company_id)
     certs = repository.list_certificates(company_id)
@@ -360,6 +427,52 @@ def render_company_profile(pathname, user):
     score = repository.compliance_score(company_id)
     unedited_contracts = repository.count_unedited_contracts(company_id)
     return _profile_content(company, certs, users, score, unedited_contracts)
+
+
+@callback(
+    Output("profile-users-results", "children"),
+    Output("profile-users-page", "data"),
+    Input("profile-users-prev", "n_clicks"),
+    Input("profile-users-next", "n_clicks"),
+    State("profile-users-page", "data"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def paginate_profile_users(_prev, _next, page, user):
+    trigger = ctx.triggered_id
+    requested_page = int(page or 1)
+    if trigger == "profile-users-prev":
+        requested_page -= 1
+    elif trigger == "profile-users-next":
+        requested_page += 1
+    else:
+        requested_page = 1
+    company_id = (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    children, current_page = _profile_users_results(repository.list_company_users(company_id), requested_page)
+    return children, current_page
+
+
+@callback(
+    Output("profile-docs-results", "children"),
+    Output("profile-docs-page", "data"),
+    Input("profile-docs-prev", "n_clicks"),
+    Input("profile-docs-next", "n_clicks"),
+    State("profile-docs-page", "data"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def paginate_profile_documents(_prev, _next, page, user):
+    trigger = ctx.triggered_id
+    requested_page = int(page or 1)
+    if trigger == "profile-docs-prev":
+        requested_page -= 1
+    elif trigger == "profile-docs-next":
+        requested_page += 1
+    else:
+        requested_page = 1
+    company_id = (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    children, current_page = _profile_documents_results(repository.list_certificates(company_id), requested_page)
+    return children, current_page
 
 
 @callback(

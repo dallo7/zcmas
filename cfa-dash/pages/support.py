@@ -1,7 +1,8 @@
-from dash import ALL, Input, Output, State, callback, dcc, html, register_page
+import dash_ag_grid as dag
+from dash import Input, Output, callback, dcc, html, register_page
+from dash.exceptions import PreventUpdate
 
 from components.layout import header
-from components.ui import badge, status_table
 from services import repository
 
 
@@ -9,50 +10,62 @@ register_page(__name__, path="/support", name="Support")
 
 
 def layout(**_kwargs):
-    tickets = repository.list_support_tickets()
     return html.Div(
         [
             header(
                 "Support",
-                help_text="Agents raise company support tickets here. Company Admin can track and resolve issues.",
+                help_text="Report view for support tickets raised in ZCAMS.",
+                pathname="/support",
             ),
             html.Div(
                 [
-                    html.Div(id="support-result"),
                     html.Div(
                         [
-                            html.H2("Raise Ticket"),
-                            html.Div(
-                                [
-                                    dcc.Input(id="ticket_subject", placeholder="Subject", className="form-control"),
-                                    dcc.Dropdown(id="ticket_module", options=[{"label": v, "value": v} for v in ["BL", "Z-SAD", "Invoice", "Check-out", "Contract", "Other"]], value="BL", className="form-control"),
-                                    dcc.Dropdown(id="ticket_priority", options=[{"label": v, "value": v} for v in ["Low", "Medium", "High"]], value="Medium", className="form-control"),
-                                    dcc.Textarea(id="ticket_description", placeholder="Description", className="form-control textarea"),
-                                ],
-                                className="form-grid",
+                            html.H2("Support Report"),
+                            html.P(
+                                "Super Admin sees every support ticket in the system. Company users see their company tickets.",
+                                className="muted section-lead",
                             ),
-                            html.Button("Create Ticket", id="create-ticket", className="btn-primary"),
+                            dcc.Input(
+                                id="support-report-search",
+                                placeholder="Search tickets by company, subject, module, priority, status...",
+                                className="form-control report-search",
+                            ),
+                            dag.AgGrid(
+                                id="support-report-grid",
+                                columnDefs=[
+                                    {"headerName": "Created", "field": "created_at", "width": 160},
+                                    {"headerName": "Company", "field": "company_name", "width": 190},
+                                    {"headerName": "Subject", "field": "subject", "flex": 1},
+                                    {"headerName": "Description", "field": "description", "flex": 2},
+                                    {"headerName": "Module", "field": "module", "width": 130},
+                                    {"headerName": "Priority", "field": "priority", "width": 120},
+                                    {"headerName": "Status", "field": "status", "width": 120},
+                                    {"headerName": "Created By", "field": "created_by", "width": 190},
+                                ],
+                                rowData=[],
+                                defaultColDef={
+                                    "sortable": True,
+                                    "filter": True,
+                                    "resizable": True,
+                                    "wrapText": True,
+                                    "autoHeight": True,
+                                    "floatingFilter": True,
+                                },
+                                dashGridOptions={
+                                    "pagination": True,
+                                    "paginationPageSize": 12,
+                                    "animateRows": True,
+                                    "domLayout": "autoHeight",
+                                },
+                                rowClassRules={
+                                    "ticket-open-row": "params.data.status === 'Open'",
+                                    "ticket-resolved-row": "params.data.status === 'Resolved'",
+                                },
+                                className="ag-theme-alpine zcams-ag-grid",
+                            ),
                         ],
                         className="card section-card stack",
-                    ),
-                    html.Div(
-                        [
-                            html.H2("Tickets"),
-                            status_table(
-                                ["Subject", "Module", "Priority", "Status", "Action"],
-                                [
-                                    [
-                                        ticket["subject"],
-                                        ticket["linked_module"],
-                                        ticket["priority"],
-                                        badge(ticket["status"]),
-                                        html.Button("Resolve", id={"type": "resolve-ticket", "id": ticket["id"]}, className="btn-secondary", disabled=ticket["status"] == "Resolved"),
-                                    ]
-                                    for ticket in tickets
-                                ],
-                            ),
-                        ],
-                        className="card section-card",
                     ),
                 ],
                 className="page-content stack",
@@ -61,26 +74,32 @@ def layout(**_kwargs):
     )
 
 
-@callback(
-    Output("support-result", "children"),
-    Input("create-ticket", "n_clicks"),
-    Input({"type": "resolve-ticket", "id": ALL}, "n_clicks"),
-    State("ticket_subject", "value"),
-    State("ticket_description", "value"),
-    State("ticket_module", "value"),
-    State("ticket_priority", "value"),
-    prevent_initial_call=True,
-)
-def support_actions(_create, _resolve, subject, description, linked_module, priority):
-    from dash import ctx, no_update
+def _ticket_rows(user: dict | None, search: str | None = None) -> list[dict]:
+    role = (user or {}).get("role")
+    company_id = None if role == "SUPER_ADMIN" else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    return [
+        {
+            "created_at": (ticket.get("created_at") or "")[:19],
+            "company_name": ticket.get("company_name") or ticket.get("company_id") or "-",
+            "subject": ticket.get("subject") or "",
+            "description": ticket.get("description") or "",
+            "module": ticket.get("linked_module") or "-",
+            "priority": ticket.get("priority") or "-",
+            "status": ticket.get("status") or "-",
+            "created_by": ticket.get("created_by_email") or ticket.get("created_by") or "-",
+        }
+        for ticket in repository.list_support_tickets(company_id=company_id, search=search)
+    ]
 
-    trigger = ctx.triggered_id
-    if trigger == "create-ticket":
-        if not subject:
-            return html.Div("Subject is required.", className="notice error")
-        ticket = repository.create_support_ticket(subject, description or "", linked_module or "Other", priority or "Medium")
-        return html.Div(f"Ticket created: {ticket['subject']}", className="notice success")
-    if isinstance(trigger, dict) and trigger.get("type") == "resolve-ticket":
-        repository.update_ticket_status(trigger["id"], "Resolved")
-        return html.Div("Ticket resolved.", className="notice success")
-    return no_update
+
+@callback(
+    Output("support-report-grid", "rowData"),
+    Input("support-report-search", "value"),
+    Input("auth-user", "data"),
+    Input("_pages_location", "pathname"),
+    prevent_initial_call=False,
+)
+def render_support_report(search, user, pathname):
+    if (pathname or "") != "/support":
+        raise PreventUpdate
+    return _ticket_rows(user, search)

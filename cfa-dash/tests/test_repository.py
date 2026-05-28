@@ -1,17 +1,32 @@
 from services.gn83 import calculate_invoice, lookup_fee
 from services.repository import (
     DEMO_COMPANY_ID,
+    admin_contract_rows,
+    admin_dashboard_summary,
+    admin_recent_audit_rows,
+    admin_workflow_rows,
+    authenticate_user,
     bootstrap,
+    change_user_password,
     contract_fingerprint,
     create_contract,
+    create_system_user,
+    delete_registry_company,
+    delete_system_user,
+    get_system_user,
     parse_shipment_details,
     generate_zsad_number,
     invoice_capitalpay_number,
     invoice_share_message,
     list_invoices_for_user,
+    list_system_users,
+    set_registry_company_status,
+    set_system_user_status,
     send_contract_to_importer,
     send_contract_review_email,
     sign_contract_with_otp,
+    update_registry_company,
+    update_system_user,
 )
 
 
@@ -64,6 +79,130 @@ def test_list_invoices_for_user_scopes_by_company():
     company_rows = list_invoices_for_user({"role": "COMPANY_ADMIN", "company_id": DEMO_COMPANY_ID})
     assert len(super_rows) >= len(company_rows)
     assert all(row.get("company_id") == DEMO_COMPANY_ID for row in company_rows)
+
+
+def test_admin_dashboard_helpers_are_company_scoped():
+    summary = admin_dashboard_summary(DEMO_COMPANY_ID)
+    workflow = admin_workflow_rows(DEMO_COMPANY_ID)
+    contracts = admin_contract_rows(DEMO_COMPANY_ID)
+    audits = admin_recent_audit_rows(DEMO_COMPANY_ID)
+
+    assert summary["company_name"]
+    assert "compliance_score" in summary
+    assert "active_users" in summary
+    assert all(row.get("bl_id") for row in workflow)
+    assert all("contract_no" in row for row in contracts)
+    assert isinstance(audits, list)
+
+
+def test_super_admin_can_create_system_user():
+    import uuid
+
+    bootstrap()
+    email = f"super-created-{uuid.uuid4().hex[:8]}@example.com"
+    user = create_system_user(
+        DEMO_COMPANY_ID,
+        "System",
+        "Created",
+        email,
+        "DECLARANT",
+        password="demo12345",
+    )
+    users = list_system_users(search=email)
+
+    assert user["email"] == email
+    assert user["role"] == "DECLARANT"
+    assert user["temp_password"] == "demo12345"
+    assert user["must_change_password"] is True
+    assert "email_result" in user
+    assert users and users[0]["email"] == email
+
+
+def test_created_user_must_change_password_then_can_clear_flag():
+    import uuid
+
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8]
+    email = f"first-login-{suffix}@example.com"
+    created = create_system_user(
+        DEMO_COMPANY_ID,
+        "First",
+        "Login",
+        email,
+        "DECLARANT",
+        username=f"firstlogin{suffix}",
+        password="TempPass123!",
+    )
+    authenticated = authenticate_user(email, "TempPass123!")
+    updated = change_user_password(created["id"], "TempPass123!", "NewPass123!")
+    authenticated_after = authenticate_user(email, "NewPass123!")
+    delete_system_user(created["id"])
+
+    assert authenticated["must_change_password"] is True
+    assert updated["must_change_password"] is False
+    assert authenticated_after["must_change_password"] is False
+
+
+def test_super_admin_can_update_suspend_activate_and_delete_system_user():
+    import uuid
+
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8]
+    email = f"super-managed-{suffix}@example.com"
+    user = create_system_user(
+        DEMO_COMPANY_ID,
+        "System",
+        "Managed",
+        email,
+        "DECLARANT",
+        username=f"supermanaged{suffix}",
+        password="demo12345",
+    )
+
+    updated = update_system_user(
+        user["id"],
+        DEMO_COMPANY_ID,
+        "System",
+        "Updated",
+        f"super-updated-{suffix}@example.com",
+        "COMPANY_ADMIN",
+        phone="260971000000",
+        username=f"superupdated{suffix}",
+    )
+    suspended = set_system_user_status(user["id"], "SUSPENDED")
+    activated = set_system_user_status(user["id"], "ACTIVE")
+    delete_system_user(user["id"])
+
+    assert updated["last_name"] == "Updated"
+    assert updated["role"] == "COMPANY_ADMIN"
+    assert suspended["status"] == "SUSPENDED"
+    assert activated["status"] == "ACTIVE"
+    assert get_system_user(user["id"]) == {}
+
+
+def test_super_admin_can_update_suspend_activate_and_delete_registry_company():
+    import uuid
+    from services.repository import execute, get_company, new_id
+
+    suffix = uuid.uuid4().hex[:8]
+    company_id = new_id("co")
+    execute(
+        """
+        INSERT INTO companies (id, name, company_email, phone, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (company_id, f"Registry Test {suffix}", f"registry-{suffix}@example.com", "260970000000", "PENDING_APPROVAL"),
+    )
+
+    updated = update_registry_company(company_id, f"Registry Updated {suffix}", f"updated-{suffix}@example.com", "260971111111")
+    suspended = set_registry_company_status(company_id, "SUSPENDED")
+    activated = set_registry_company_status(company_id, "APPROVED")
+    delete_registry_company(company_id)
+
+    assert updated["name"] == f"Registry Updated {suffix}"
+    assert suspended["status"] == "SUSPENDED"
+    assert activated["status"] == "APPROVED"
+    assert get_company(company_id) == {}
 
 
 def test_contract_signing_requires_otp_and_stores_fingerprint():

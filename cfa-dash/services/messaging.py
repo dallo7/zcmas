@@ -125,6 +125,77 @@ def send_email(
     )
 
 
+def new_user_registration_email(
+    *,
+    company_name: str,
+    contact_name: str,
+    to_email: str,
+    role_label: str,
+    username: str,
+    password: str,
+    login_url: str,
+) -> tuple[str, str, str]:
+    subject = f"ZCAMS access created - {company_name}"
+    text = (
+        f"Dear {contact_name},\n\n"
+        f"Your ZCAMS {role_label} account has been created for {company_name}.\n\n"
+        "Login credentials:\n"
+        f"  Login URL: {login_url}\n"
+        f"  Username: {username}\n"
+        f"  Email: {to_email}\n"
+        f"  Temporary password: {password}\n\n"
+        "For security, ZCAMS will ask you to set your own password the first time you sign in.\n\n"
+        "Regards,\nZCAMS - Zambia Customs Agent Management System"
+    )
+    html = (
+        f"<p>Dear <strong>{contact_name}</strong>,</p>"
+        f"<p>Your ZCAMS <strong>{role_label}</strong> account has been created for "
+        f"<strong>{company_name}</strong>.</p>"
+        f"<table style='border-collapse:collapse;margin:16px 0'>"
+        f"<tr><td style='padding:6px 12px;font-weight:600'>Login URL</td><td style='padding:6px 12px'><a href='{login_url}'>{login_url}</a></td></tr>"
+        f"<tr><td style='padding:6px 12px;font-weight:600'>Username</td><td style='padding:6px 12px'>{username}</td></tr>"
+        f"<tr><td style='padding:6px 12px;font-weight:600'>Email</td><td style='padding:6px 12px'>{to_email}</td></tr>"
+        f"<tr><td style='padding:6px 12px;font-weight:600'>Temporary password</td><td style='padding:6px 12px'><code>{password}</code></td></tr>"
+        f"</table>"
+        f"<p>For security, ZCAMS will ask you to set your own password the first time you sign in.</p>"
+        f"<p>Regards,<br/><strong>ZCAMS</strong> - Zambia Customs Agent Management System</p>"
+    )
+    return subject, text, html
+
+
+def send_new_user_registration_email(
+    to_email: str,
+    subject: str,
+    body: str,
+    *,
+    html: str | None = None,
+    recipient_name: str | None = None,
+    description: str = "ZCAMS new user registration",
+) -> dict:
+    """Send new-user credentials through a real provider; never silently mock."""
+    target = (to_email or "").strip()
+    if not target:
+        return {"sent": False, "mode": "unconfigured", "reason": "No recipient email"}
+    if bird_email_enabled():
+        return send_bird_email(
+            target,
+            subject,
+            body,
+            html=html,
+            recipient_name=recipient_name,
+            description=description,
+        )
+    gmail_user = os.getenv("GMAIL_SMTP_USER", "").strip()
+    gmail_password = os.getenv("GMAIL_SMTP_PASSWORD", "").strip()
+    if gmail_user and gmail_password:
+        return _send_gmail_smtp(target, subject, body, html=html)
+    return {
+        "sent": False,
+        "mode": "unconfigured",
+        "reason": "New-user email requires Bird API or Gmail SMTP credentials.",
+    }
+
+
 def onboarding_approval_email(
     *,
     company_name: str,

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import os
 import random
 import string
@@ -34,6 +37,10 @@ def _base_url() -> str:
     return os.getenv("CAPITALPAY_BASE_URL", "https://app.capitalpay.co.tz/api").rstrip("/")
 
 
+def _checkout_url() -> str:
+    return os.getenv("CAPITALPAY_CHECKOUT_URL", "https://app.capitalpay.co.tz/PaymentAPI/invoice/checkout").strip()
+
+
 def _public_base_url() -> str:
     return os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/")
 
@@ -65,6 +72,17 @@ def _format_msisdn(phone: str | None) -> str:
         return raw
     digits = normalize_zambia_phone(phone)
     return f"+{digits}" if digits else ""
+
+
+def normalize_checkout_html(html: str) -> str:
+    public_host = os.getenv("CAPITALPAY_PUBLIC_HOST", "https://app.capitalpay.co.tz").rstrip("/")
+    private_hosts = (
+        "https://192.168.92.110",
+        "http://192.168.92.110",
+    )
+    for private_host in private_hosts:
+        html = html.replace(private_host, public_host)
+    return html
 
 
 def capitalpay_payable_amount(calc_total: float) -> float:
@@ -300,3 +318,91 @@ def create_checkout_link(invoice_id: str, z_sad_number: str, amount: float, capi
         "expires_at": expires.isoformat(),
         "mode": "real",
     }
+
+
+def compute_checkout_secure_hash(
+    *,
+    api_client_id: str,
+    amount: str,
+    service_id: str,
+    client_id_number: str,
+    currency: str,
+    bill_ref_number: str,
+    bill_desc: str,
+    client_name: str,
+) -> str:
+    cfg = _config()
+    data_string = (
+        api_client_id
+        + amount
+        + service_id
+        + client_id_number
+        + currency
+        + bill_ref_number
+        + bill_desc
+        + client_name
+        + cfg["secret"]
+    )
+    raw_hash = hmac.new(cfg["key"].encode(), data_string.encode(), hashlib.sha256).digest()
+    return base64.b64encode(raw_hash).decode()
+
+
+def build_checkout_params(
+    *,
+    client_name: str,
+    client_msisdn: str | None,
+    client_email: str | None,
+    client_id_number: str,
+    amount: float,
+    currency: str,
+    bill_ref_number: str,
+    bill_desc: str,
+) -> dict[str, str]:
+    cfg = _config()
+    account_id = str(cfg["account_id"])
+    amount_str = f"{float(amount):.2f}"
+    params = {
+        "apiClientID": account_id,
+        "secureHash": compute_checkout_secure_hash(
+            api_client_id=account_id,
+            amount=amount_str,
+            service_id=account_id,
+            client_id_number=client_id_number,
+            currency=currency,
+            bill_ref_number=bill_ref_number,
+            bill_desc=bill_desc,
+            client_name=client_name,
+        ),
+        "billDesc": bill_desc,
+        "billRefNumber": bill_ref_number,
+        "currency": currency,
+        "serviceID": account_id,
+        "clientMSISDN": _format_msisdn(client_msisdn),
+        "clientName": client_name,
+        "clientIDNumber": client_id_number,
+        "clientEmail": client_email or "",
+        "notificationURL": cfg["notification_url"],
+        "amountExpected": amount_str,
+    }
+    if cfg["callback_url"]:
+        params["callBackURLOnSuccess"] = cfg["callback_url"]
+    return params
+
+
+def fetch_checkout_page(params: dict[str, str]) -> str:
+    if _mock_enabled():
+        ref = params.get("billRefNumber") or "CPAYMOCK"
+        amount = params.get("amountExpected") or "0.00"
+        return f"""
+        <!doctype html>
+        <html><body style="font-family:Arial;padding:32px">
+        <h2>CapitalPay Mock Checkout</h2>
+        <p>Payment Ref: <strong>{ref}</strong></p>
+        <p>Total Bill: <strong>USD {amount}</strong></p>
+        <p>Mock mode is enabled. No real payment was attempted.</p>
+        </body></html>
+        """
+    response = requests.post(_checkout_url(), data=params, timeout=45)
+    if not response.ok:
+        raise CapitalPayError(f"CapitalPay checkout failed (HTTP {response.status_code}): {response.text[:300]}")
+    return normalize_checkout_html(response.text)

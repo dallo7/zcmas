@@ -771,6 +771,7 @@ def invoice_request_modal():
                         ),
                         dcc.Download(id="invoice-pdf-download"),
                         dcc.Store(id="invoice-share-whatsapp-url"),
+                        dcc.Store(id="invoice-pay-now-checkout-url"),
                     ],
                     className="invoice-settlement-card",
                     id="invoice-step-details",
@@ -783,6 +784,13 @@ def invoice_request_modal():
                             "Generate & share invoice",
                             id="invoice-request-submit",
                             className="btn-primary",
+                            type="button",
+                            style={"display": "none"},
+                        ),
+                        html.Button(
+                            "Pay Now",
+                            id="invoice-pay-now-submit",
+                            className="btn-secondary",
                             type="button",
                             style={"display": "none"},
                         ),
@@ -1132,6 +1140,17 @@ def invoice_choose_settlement(_service_clicks, _full_clicks, _back_clicks, revie
 
 
 @callback(
+    Output("invoice-pay-now-submit", "style"),
+    Input("invoice-modal-step", "data"),
+    Input("invoice-request-submit", "style"),
+)
+def toggle_pay_now_button(step, submit_style):
+    if step == "details" and submit_style != _SUBMIT_HIDDEN:
+        return _SUBMIT_VISIBLE
+    return _SUBMIT_HIDDEN
+
+
+@callback(
     Output("invoice-modal-zsad", "children"),
     Output("invoice-modal-bl", "children"),
     Output("invoice-full-fields", "style"),
@@ -1374,6 +1393,93 @@ def submit_invoice_request(
     return result, whatsapp_url
 
 
+@callback(
+    Output("invoice-request-result", "children", allow_duplicate=True),
+    Output("invoice-pay-now-checkout-url", "data", allow_duplicate=True),
+    Input("invoice-pay-now-submit", "n_clicks"),
+    State("invoice-request-reviewed", "data"),
+    State("invoice-settlement-mode", "data"),
+    State("invoice-full-amount", "value"),
+    State("invoice-beneficiary-name", "value"),
+    State("invoice-beneficiary-bank", "value"),
+    State("invoice-beneficiary-account", "value"),
+    State("invoice-bank-confirm", "value"),
+    State("invoice-contact-phone", "value"),
+    State("invoice-contact-email", "value"),
+    State("bl-last-bl-id", "data"),
+    prevent_initial_call=True,
+)
+def submit_invoice_pay_now(
+    _clicks,
+    data,
+    mode,
+    amount,
+    beneficiary_name,
+    bank_name,
+    account_number,
+    confirmed,
+    phone,
+    email,
+    bl_id,
+):
+    if not _clicks:
+        raise PreventUpdate
+    data, reviewed = _resolve_invoice_reviewed(data, bl_id)
+    if not reviewed:
+        return html.Div("Select a reviewed BL before paying.", className="notice error"), no_update
+    if not str(phone or "").strip():
+        return html.Div("Enter a contact phone number before opening checkout.", className="notice error"), no_update
+
+    invoice_type = mode or "SERVICE_FEE_ONLY"
+    std_override = None
+    if invoice_type == "FULL_SETTLEMENT":
+        if any(not str(value or "").strip() for value in [beneficiary_name, bank_name, account_number]):
+            return html.Div("Enter all beneficiary bank details for Full Settlement.", className="notice error"), no_update
+        if "CONFIRMED" not in (confirmed or []):
+            return html.Div("Confirm the beneficiary bank details before paying.", className="notice error"), no_update
+        std_override = float(amount or 0)
+
+    try:
+        invoice = repository.generate_invoice(
+            reviewed["id"],
+            invoice_type,
+            std_min_fee_override=std_override,
+            contact_phone=str(phone).strip(),
+            contact_email=str(email or "").strip() or None,
+            beneficiary_name=str(beneficiary_name or "").strip() or None,
+            beneficiary_bank_name=str(bank_name or "").strip() or None,
+            beneficiary_account_number=str(account_number or "").strip() or None,
+        )
+    except ValueError as exc:
+        return html.Div(str(exc), className="notice error"), no_update
+    except Exception as exc:  # noqa: BLE001
+        _invoice_logger.exception("Pay Now invoice generation failed")
+        return html.Div(f"Pay Now failed: {exc.__class__.__name__}: {exc}", className="notice error"), no_update
+
+    checkout_url = f"/capitalpay/checkout/{invoice['id']}"
+    result = html.Div(
+        [
+            html.Div(
+                f"Invoice {invoice['invoice_number']} is ready for in-system payment. Open CapitalPay checkout to choose a bank/payment option.",
+                className="notice success",
+            ),
+            html.A(
+                [icon("lucide:external-link", 14), "Open CapitalPay Checkout"],
+                href=checkout_url,
+                target="_blank",
+                rel="noopener noreferrer",
+                className="btn-primary",
+            ),
+            html.P(
+                f"CapitalPay ref: {invoice.get('capitalpay_urn') or '-'} | Amount: {repository.money(invoice.get('payable_amount') or invoice.get('total') or 0)}",
+                className="field-hint",
+            ),
+        ],
+        className="stack compact",
+    )
+    return result, checkout_url
+
+
 # Auto-open the WhatsApp share link in a new tab when an invoice is generated
 # with the WHATSAPP channel selected. Runs in the same user-gesture context as
 # the submit click, so the browser popup blocker permits it. After opening we
@@ -1388,6 +1494,20 @@ clientside_callback(
     """,
     Output("invoice-share-whatsapp-url", "data", allow_duplicate=True),
     Input("invoice-share-whatsapp-url", "data"),
+    prevent_initial_call=True,
+)
+
+
+clientside_callback(
+    """
+    function(url) {
+        if (!url) { return window.dash_clientside.no_update; }
+        try { window.open(url, '_blank', 'noopener'); } catch (e) {}
+        return '';
+    }
+    """,
+    Output("invoice-pay-now-checkout-url", "data", allow_duplicate=True),
+    Input("invoice-pay-now-checkout-url", "data"),
     prevent_initial_call=True,
 )
 

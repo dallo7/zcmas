@@ -2,14 +2,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Response, abort, send_file
+from flask import Response, abort, request, send_file
 
 from services.db import UPLOAD_DIR
 from services.pdf_service import generate_invoice_pdf
+from services import capitalpay
 from services.repository import ensure_invoice_pdf, get_certificate, get_company, get_contract, get_invoice, render_contract_html
 
 
 def register_invoice_routes(flask_app) -> None:
+    from services import auth
+
+    @flask_app.before_request
+    def _protect_downloads():
+        path = (request.path or "").lower()
+        if path.startswith("/download/") or path.startswith("/preview/contract"):
+            if not auth.current_user():
+                abort(401)
+
     @flask_app.get("/download/invoice/<invoice_id>.pdf")
     def download_invoice_pdf(invoice_id: str):
         invoice = get_invoice(invoice_id)
@@ -60,6 +70,35 @@ def register_invoice_routes(flask_app) -> None:
             html = render_contract_html(contract_id)
         except Exception as exc:
             abort(500, description=str(exc))
+        return Response(html, mimetype="text/html")
+
+    @flask_app.get("/capitalpay/checkout/<invoice_id>")
+    def capitalpay_checkout(invoice_id: str):
+        invoice = get_invoice(invoice_id)
+        if not invoice:
+            abort(404)
+        current = auth.current_user()
+        if not current:
+            abort(401)
+        if current.get("role") != auth.ROLE_SUPER_ADMIN and invoice.get("company_id") != current.get("company_id"):
+            abort(403)
+        bill_ref = invoice.get("capitalpay_urn") or invoice.get("capitalpay_ref") or invoice.get("invoice_number")
+        amount = float(invoice.get("payable_amount") or invoice.get("total") or 0)
+        client_name = invoice.get("beneficiary_name") or invoice.get("consignee_name") or "ZCAMS Importer"
+        params = capitalpay.build_checkout_params(
+            client_name=client_name,
+            client_msisdn=invoice.get("contact_phone"),
+            client_email=invoice.get("contact_email") or invoice.get("consignee_email"),
+            client_id_number=invoice.get("consignee_tin") or invoice.get("z_sad_number") or bill_ref,
+            amount=amount,
+            currency="USD",
+            bill_ref_number=bill_ref,
+            bill_desc=f"ZCAMS payment for {invoice.get('invoice_number')} | BL {invoice.get('bl_number')}",
+        )
+        try:
+            html = capitalpay.fetch_checkout_page(params)
+        except capitalpay.CapitalPayError as exc:
+            abort(502, description=str(exc))
         return Response(html, mimetype="text/html")
 
     @flask_app.get("/download/contract/<contract_id>.html")

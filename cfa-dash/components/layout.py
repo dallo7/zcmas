@@ -15,9 +15,38 @@ PRIMARY_NAV = [
     ("/company-profile", "lucide:building-2", "Company Profile"),
 ]
 
+DECLARANT_NAV = [
+    ("/dashboard", "material-symbols:dashboard-outline-rounded", "Dashboard"),
+    ("/bls", "lucide:file-up", "BLs"),
+    ("/reviewed-bl#active-reviewed-bls", "lucide:file-check-2", "Reviewed BL"),
+    ("/invoices", "lucide:receipt", "Invoices"),
+    ("/checkout", "lucide:credit-card", "Check-out"),
+    ("/contracts", "lucide:file-signature", "Contracts"),
+]
+
+SUPER_ADMIN_NAV = [
+    ("/super-admin", "lucide:shield-check", "Platform Control"),
+    ("/super-admin#users", "lucide:users-round", "User Management"),
+    ("/super-admin#companies", "lucide:building", "CFA Registry"),
+    ("/super-admin#sessions", "lucide:monitor", "Sessions & Logins"),
+    ("/super-admin#audit", "lucide:scroll-text", "Audit Log"),
+    ("/super-admin#transactions", "lucide:git-branch", "Transactions"),
+    ("/super-admin#support", "lucide:headphones", "Support"),
+]
+
+ADMIN_HUB_NAV = [
+    ("/admin", "lucide:settings", "Company Admin"),
+    ("/admin#tools", "lucide:wrench", "Support Tools"),
+]
+
 SECONDARY_NAV = [
     ("/notifications", "lucide:bell", "Notifications"),
     ("/support", "lucide:headphones", "Support"),
+    ("/chat", "lucide:message-circle", "ZCAMS Chat"),
+    ("/gn83", "lucide:file-star", "GN 83 Schedule"),
+]
+
+SUPER_ADMIN_TOOLS_NAV = [
     ("/chat", "lucide:message-circle", "ZCAMS Chat"),
     ("/gn83", "lucide:file-star", "GN 83 Schedule"),
 ]
@@ -42,19 +71,48 @@ def display_user(user: dict | None = None) -> dict:
         return DEMO_USER
     first = user.get("first_name") or "ZCAMS"
     last = user.get("last_name") or "User"
-    role = (user.get("role") or "COMPANY_ADMIN").replace("_", " ").title()
+    role_key = (user.get("role") or "COMPANY_ADMIN").upper()
+    if role_key == "DECLARANT":
+        role = "Declarant / Agent"
+    else:
+        role = role_key.replace("_", " ").title()
     initials = f"{first[:1]}{last[:1]}".upper()
-    is_super_admin = user.get("role") == "SUPER_ADMIN"
+    is_super_admin = role_key == "SUPER_ADMIN"
+    company_name = user.get("company_name")
+    if not company_name and user.get("company_id"):
+        from services import repository
+
+        company_name = (repository.get_company(user["company_id"]) or {}).get("name")
+    tenant_name = "ZCAMS Administration" if is_super_admin else (company_name or TENANT["name"])
     return {
         "initials": initials,
         "name": f"{first} {last}",
         "email": user.get("email") or DEMO_USER["email"],
-        "company": "ZCAMS Super Admin Console" if is_super_admin else TENANT["name"],
+        "company": "ZCAMS Super Admin Console" if is_super_admin else (company_name or TENANT["name"]),
         "role": role,
-        "tenant_name": "ZCAMS Administration" if is_super_admin else TENANT["name"],
+        "tenant_name": tenant_name,
         "tenant_role": "Platform Oversight" if is_super_admin else TENANT["role"],
         "tenant_code": "SA" if is_super_admin else TENANT["code"],
     }
+
+
+def nav_items_for_user(user: dict | None) -> tuple[list, list, list]:
+    """Return primary nav, admin section label items, secondary nav for the signed-in role."""
+    role = (user or {}).get("role", "COMPANY_ADMIN").upper()
+    if role == "SUPER_ADMIN":
+        return [
+            *SUPER_ADMIN_NAV,
+            ("/dashboard", "material-symbols:dashboard-outline-rounded", "Dashboard"),
+            ("/bls", "lucide:file-up", "BLs"),
+            ("/reviewed-bl#active-reviewed-bls", "lucide:file-check-2", "Reviewed BL"),
+            ("/invoices", "lucide:receipt", "Invoices"),
+            ("/checkout", "lucide:credit-card", "Check-out"),
+            ("/contracts", "lucide:file-signature", "Contracts"),
+            ("/company-profile", "lucide:building-2", "Company Profile"),
+        ], ADMIN_HUB_NAV, SUPER_ADMIN_TOOLS_NAV
+    if role == "DECLARANT":
+        return DECLARANT_NAV, [], SECONDARY_NAV
+    return PRIMARY_NAV, ADMIN_HUB_NAV, SECONDARY_NAV
 
 
 PAGE_TUTORIALS = {
@@ -205,11 +263,21 @@ NAV_BADGE_KEYS = {
 
 def sidebar(pathname: str = "/dashboard", user: dict | None = None):
     display = display_user(user)
-    counts = counts_for_nav()
+    role = (user or {}).get("role", "COMPANY_ADMIN").upper()
+    company_id = None if role == "SUPER_ADMIN" else (user or {}).get("company_id")
+    counts = counts_for_nav(company_id)
+    primary_nav, admin_nav, secondary_nav = nav_items_for_user(user)
 
     def nav_link(href: str, icon_name: str, label: str):
         base_href = href.split("#", 1)[0]
-        is_active = pathname == base_href or (base_href != "/dashboard" and (pathname or "").startswith(base_href))
+        current = pathname or ""
+        current_base, current_hash = (current.split("#", 1) + [""])[:2]
+        if "#" in href:
+            is_active = current == href
+        elif current_hash:
+            is_active = False
+        else:
+            is_active = current_base == base_href
         badge_key = NAV_BADGE_KEYS.get(href)
         badge_el = nav_badge(counts.get(badge_key, 0)) if badge_key else None
         return dcc.Link(
@@ -255,9 +323,17 @@ def sidebar(pathname: str = "/dashboard", user: dict | None = None):
             ),
             html.Nav(
                 [
-                    *[nav_link(*item) for item in PRIMARY_NAV],
+                    *[nav_link(*item) for item in primary_nav],
+                    *(
+                        [
+                            html.Div("Administration", className="nav-section-label"),
+                            *[nav_link(*item) for item in admin_nav],
+                        ]
+                        if admin_nav
+                        else []
+                    ),
                     html.Div("Tools", className="nav-section-label"),
-                    *[nav_link(*item) for item in SECONDARY_NAV],
+                    *[nav_link(*item) for item in secondary_nav],
                 ],
                 className="sidebar-nav",
             ),
@@ -272,7 +348,7 @@ def sidebar(pathname: str = "/dashboard", user: dict | None = None):
                             ],
                             style={"minWidth": 0, "flex": 1},
                         ),
-                        dcc.Link(icon("lucide:log-out", 14, color="rgba(255,255,255,0.50)"), href="/login?logout=1", className="logout-link", title="Return to login"),
+                        dcc.Link(icon("lucide:log-out", 14, color="rgba(255,255,255,0.50)"), href="/logout", className="logout-link", title="Sign out"),
                     ],
                     className="user-card",
                 ),

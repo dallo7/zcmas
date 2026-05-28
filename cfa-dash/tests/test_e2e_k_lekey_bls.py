@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from app import server
+from services import auth
 from services.gn83 import calculate_invoice, gn83_quote_for_reviewed
 from services.ocr import extract_bl_fields
 from services.repository import (
@@ -25,6 +26,7 @@ from services.repository import (
     generate_invoice,
     get_reviewed_bl,
     share_invoice_with_importer,
+    authenticate_user,
 )
 
 K_LEKEY_DIR = Path(
@@ -123,6 +125,9 @@ def _run_bl_e2e(pdf_name: str, invoice_type: str) -> dict:
     )
 
     client = server.test_client()
+    user = authenticate_user("companyadmin", "demo123")
+    assert user
+    auth.install_client_session(client, user)
     pdf_resp = client.get(f"/download/invoice/{invoice['id']}.pdf")
     assert pdf_resp.status_code == 200
     assert pdf_resp.data[:4] == b"%PDF"

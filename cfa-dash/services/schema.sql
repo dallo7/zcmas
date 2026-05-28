@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT,
   password_salt TEXT,
+  must_change_password INTEGER NOT NULL DEFAULT 0,
+  password_changed_at TEXT,
   phone TEXT,
   whatsapp TEXT,
   role TEXT NOT NULL,
@@ -225,6 +227,19 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS chat_events (
+  id TEXT PRIMARY KEY,
+  company_id TEXT,
+  user_id TEXT,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  mode TEXT,
+  quality TEXT NOT NULL DEFAULT 'Neutral Response',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE SET NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
   company_id TEXT,
@@ -236,3 +251,32 @@ CREATE TABLE IF NOT EXISTS audit_events (
   ip_address TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  session_token TEXT NOT NULL UNIQUE,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(session_token);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS login_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  email TEXT,
+  success INTEGER NOT NULL DEFAULT 0,
+  ip_address TEXT,
+  user_agent TEXT,
+  failure_reason TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_login_events_created ON login_events(created_at DESC);

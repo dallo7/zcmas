@@ -2,12 +2,12 @@ import base64
 import binascii
 from pathlib import Path
 
+import dash_ag_grid as dag
 from dash import ALL, Input, Output, State, callback, ctx, dcc, html, no_update, register_page
 from dash.exceptions import PreventUpdate
 
 from components.icons import icon
 from components.layout import header
-from components.ui import badge, status_table
 from components.workflow import shortcut_chip
 from services import ocr
 from services import repository
@@ -323,52 +323,78 @@ def _detach_modal() -> html.Div:
     )
 
 
-def _who_cell(bl: dict) -> html.Td:
+def _bl_cancel_details(bl: dict) -> str:
     if (bl.get("status") or "") != "CANCELLED":
-        return html.Td("-", className="muted")
+        return "-"
     who = bl.get("cancelled_by_name") or repository.get_user_display(bl.get("cancelled_by"))
     when = (bl.get("cancelled_at") or "-").replace("T", " ")[:19]
     reason = bl.get("cancel_reason") or "-"
     if reason == "Other" and bl.get("cancel_reason_detail"):
         reason = f"Other: {bl['cancel_reason_detail']}"
-    return html.Td(
-        html.Span(f"{who} · {reason}", className="muted", title=f"Cancelled {when}"),
-    )
+    return f"{who} | {reason} | {when}"
+
+
+def _bl_grid_rows(bls: list[dict]) -> list[dict]:
+    return [
+        {
+            "bl_number": bl.get("display_bl_number") or bl.get("bl_number") or "-",
+            "route": bl.get("route_type") or "-",
+            "transport": bl.get("transport_mode") or "-",
+            "consignee": bl.get("consignee_name") or "-",
+            "status": (bl.get("status") or "-").replace("_", " ").title(),
+            "raw_status": bl.get("status") or "",
+            "who": _bl_cancel_details(bl),
+        }
+        for bl in bls
+    ]
 
 
 def _bl_table(bls):
-    body_rows = []
-    for bl in bls:
-        cells = [
-            bl.get("display_bl_number") or bl["bl_number"],
-            bl["route_type"],
-            bl["transport_mode"],
-            bl.get("consignee_name") or "-",
-            badge(bl["status"]),
-            _who_cell(bl),
-        ]
-        body_rows.append(html.Tr(cells))
-    return html.Table(
-        [
-            html.Thead(
-                html.Tr(
-                    [
-                        html.Th("BL Number"),
-                        html.Th("Route"),
-                        html.Th("Transport"),
-                        html.Th("Consignee"),
-                        html.Th("Status"),
-                        html.Th("Who"),
-                    ]
-                )
-            ),
-            html.Tbody(
-                body_rows
-                if body_rows
-                else [html.Tr(html.Td("No records yet.", colSpan=6, className="muted"))]
-            ),
+    return dag.AgGrid(
+        id="uploaded-bls-grid",
+        columnDefs=[
+            {
+                "field": "bl_number",
+                "headerName": "BL Number",
+                "minWidth": 260,
+                "flex": 2,
+                "pinned": "left",
+                "checkboxSelection": True,
+                "headerCheckboxSelection": True,
+            },
+            {"field": "route", "headerName": "Route", "minWidth": 120, "flex": 1},
+            {"field": "transport", "headerName": "Transport", "minWidth": 130, "flex": 1},
+            {"field": "consignee", "headerName": "Consignee", "minWidth": 220, "flex": 1.4},
+            {"field": "status", "headerName": "Status", "minWidth": 170, "flex": 1},
+            {"field": "who", "headerName": "Who / Action", "minWidth": 240, "flex": 1.3},
         ],
-        className="data-table",
+        rowData=_bl_grid_rows(bls),
+        selectedRows=[],
+        defaultColDef={
+            "sortable": True,
+            "filter": True,
+            "resizable": True,
+            "wrapText": True,
+            "autoHeight": True,
+            "floatingFilter": True,
+        },
+        dashGridOptions={
+            "pagination": True,
+            "paginationPageSize": 8,
+            "animateRows": True,
+            "domLayout": "autoHeight",
+            "enableCellTextSelection": True,
+            "ensureDomOrder": True,
+            "rowSelection": "multiple",
+            "suppressRowClickSelection": True,
+            "overlayNoRowsTemplate": "<span class='muted'>No BL records yet.</span>",
+        },
+        rowClassRules={
+            "bl-grid-cancelled-row": "params.data.raw_status == 'CANCELLED'",
+            "bl-grid-reviewed-row": "params.data.raw_status == 'REVIEWED'",
+            "bl-grid-uploaded-row": "params.data.raw_status == 'UPLOADED'",
+        },
+        className="ag-theme-alpine zcams-ag-grid bls-ag-grid",
     )
 
 

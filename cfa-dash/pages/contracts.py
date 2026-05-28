@@ -24,6 +24,7 @@ def layout(**_kwargs):
             ),
             dcc.Store(id="contracts-refresh-token", data=0),
             dcc.Store(id="latest-contract-id"),
+            dcc.Store(id="contracts-page", data=1),
             html.Div(
                 [
                     html.Div(id="contract-result"),
@@ -156,7 +157,9 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             html.H2("Contract Register"),
+                            _table_toolbar("contracts-search", "Search contracts by number, importer, email, status, signature, or fingerprint..."),
                             html.Div(id="contract-register"),
+                            html.Div(id="contracts-pagination"),
                         ],
                         className="card section-card",
                     ),
@@ -164,6 +167,63 @@ def layout(**_kwargs):
                 className="page-content stack",
             ),
         ]
+    )
+
+
+TABLE_PAGE_SIZE = 8
+
+
+def _table_toolbar(search_id: str, placeholder: str):
+    return html.Div(
+        [
+            icon("lucide:search", 15),
+            dcc.Input(id=search_id, placeholder=placeholder, className="form-control table-search-input"),
+        ],
+        className="table-toolbar",
+    )
+
+
+def _matches_text(values: list, search: str | None) -> bool:
+    term = (search or "").strip().lower()
+    if not term:
+        return True
+    haystack = " ".join(str(value or "") for value in values).lower()
+    return all(part in haystack for part in term.split())
+
+
+def _contract_matches(contract: dict, search: str | None) -> bool:
+    return _matches_text(
+        [
+            contract.get("contract_no"),
+            contract.get("contract_hash"),
+            contract.get("importer_name"),
+            contract.get("importer_email"),
+            contract.get("importer_phone"),
+            contract.get("status"),
+            contract.get("signed_by"),
+            contract.get("signed_at"),
+            contract.get("created_at"),
+        ],
+        search,
+    )
+
+
+def _page_rows(rows: list[dict], page: int | None) -> tuple[list[dict], int, int]:
+    total_pages = max(1, ((len(rows) - 1) // TABLE_PAGE_SIZE) + 1)
+    current = max(1, min(int(page or 1), total_pages))
+    start = (current - 1) * TABLE_PAGE_SIZE
+    return rows[start : start + TABLE_PAGE_SIZE], current, total_pages
+
+
+def _pagination_controls(total_rows: int, page: int, total_pages: int | None = None):
+    total_pages = total_pages or max(1, ((total_rows - 1) // TABLE_PAGE_SIZE) + 1)
+    return html.Div(
+        [
+            html.Button("Previous", id="contracts-prev", className="btn-secondary compact", type="button", disabled=page <= 1),
+            html.Span(f"Page {page} of {total_pages} | {total_rows} records", className="muted"),
+            html.Button("Next", id="contracts-next", className="btn-secondary compact", type="button", disabled=page >= total_pages),
+        ],
+        className="table-pagination",
     )
 
 
@@ -253,16 +313,32 @@ def _contract_register(contracts: list[dict]):
 
 @callback(
     Output("contract-register", "children"),
+    Output("contracts-pagination", "children"),
+    Output("contracts-page", "data"),
     Input("_pages_location", "pathname"),
     Input("auth-user", "data"),
     Input("contracts-refresh-token", "data"),
+    Input("contracts-search", "value"),
+    Input("contracts-prev", "n_clicks"),
+    Input("contracts-next", "n_clicks"),
+    State("contracts-page", "data"),
     prevent_initial_call=False,
 )
-def render_contract_register(pathname, user, _refresh_token):
+def render_contract_register(pathname, user, _refresh_token, search, _prev, _next, page):
     if (pathname or "") != "/contracts":
         raise PreventUpdate
     company_id = None if (user or {}).get("role") == "SUPER_ADMIN" else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
-    return _contract_register(repository.list_contracts(company_id))
+    trigger = ctx.triggered_id
+    requested_page = int(page or 1)
+    if trigger == "contracts-prev":
+        requested_page -= 1
+    elif trigger == "contracts-next":
+        requested_page += 1
+    else:
+        requested_page = 1
+    contracts = [row for row in repository.list_contracts(company_id) if _contract_matches(row, search)]
+    visible, current_page, total_pages = _page_rows(contracts, requested_page)
+    return _contract_register(visible), _pagination_controls(len(contracts), current_page, total_pages), current_page
 
 
 def _shipment_cards(contract: dict):

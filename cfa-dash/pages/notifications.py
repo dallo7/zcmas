@@ -1,4 +1,4 @@
-from dash import Input, Output, callback, html, register_page
+from dash import Input, Output, callback, dcc, html, register_page
 from dash.exceptions import PreventUpdate
 
 from components.layout import header
@@ -20,9 +20,14 @@ def layout(**_kwargs):
                 html.Div(
                     [
                         html.Div(id="notification-summary"),
+                        dcc.Input(
+                            id="notification-search",
+                            placeholder="Search notifications by event, message, company, or entity...",
+                            className="form-control report-search",
+                        ),
                         html.Div(id="notification-list"),
                     ],
-                    className="card section-card",
+                    className="card section-card stack",
                 ),
                 className="page-content",
             ),
@@ -57,13 +62,25 @@ def _notification_list(notes: list[dict]):
     Output("notification-list", "children"),
     Input("_pages_location", "pathname"),
     Input("auth-user", "data"),
+    Input("notification-search", "value"),
     prevent_initial_call=False,
 )
-def render_notifications(pathname, user):
+def render_notifications(pathname, user, search):
     if (pathname or "") != "/notifications":
         raise PreventUpdate
     company_id = None if (user or {}).get("role") == "SUPER_ADMIN" else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
     notes = repository.list_notifications(company_id=company_id)
+    if search:
+        q = search.strip().lower()
+        notes = [
+            note
+            for note in notes
+            if q
+            in " ".join(
+                str(note.get(field) or "")
+                for field in ("event_type", "message", "company_name", "created_at", "related_entity_id")
+            ).lower()
+        ]
     unread = sum(1 for note in notes if not int(note.get("is_read") or 0))
     return (
         html.Div(

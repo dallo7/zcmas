@@ -121,9 +121,10 @@ def layout(**_kwargs):
     Input("clear-chat", "n_clicks"),
     State("chat-question", "value"),
     State("zcams-chat-history", "data"),
+    State("auth-user", "data"),
     prevent_initial_call=True,
 )
-def answer(_ask_clicks, _clear_clicks, question, history):
+def answer(_ask_clicks, _clear_clicks, question, history, user):
     history = list(history or [])
     if ctx.triggered_id == "clear-chat":
         return [], _render_messages([]), ""
@@ -132,6 +133,6 @@ def answer(_ask_clicks, _clear_clicks, question, history):
         return no_update, no_update, no_update
 
     user_message = {"role": "user", "content": question.strip()}
-    answer_text = repository.chat_answer(question.strip(), history)
+    answer_text = repository.chat_answer(question.strip(), history, user=user)
     next_history = [*history, user_message, {"role": "assistant", "content": answer_text}][-24:]
     return next_history, _render_messages(next_history), ""

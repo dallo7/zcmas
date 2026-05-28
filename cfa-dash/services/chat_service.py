@@ -334,6 +334,11 @@ def _document_corpus() -> list[tuple[str, str]]:
     return corpus
 
 
+def clear_document_cache() -> None:
+    """Reload uploaded chat context on the next answer."""
+    _document_corpus.cache_clear()
+
+
 def _ranked_snippets(question: str, corpus: list[tuple[str, str]], *, limit: int, snippet_chars: int) -> list[str]:
     question_tokens = _tokens(question)
     if not question_tokens:

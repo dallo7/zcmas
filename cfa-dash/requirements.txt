@@ -5,6 +5,7 @@
 dash==4.1.0
 dash-mantine-components==2.7.0
 dash-iconify==0.1.2
+dash-ag-grid==35.2.0
 python-dotenv==1.2.2
 requests==2.34.2
 reportlab==4.5.1

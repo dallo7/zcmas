@@ -14,7 +14,7 @@ from components.agentic_mode import agentic_modal, render_progress
 from components.layout import sidebar
 from components.workflow import workflow_strip
 from components.icons import icon
-from services import agentic_workflow, repository
+from services import agentic_workflow, auth, repository
 from services.invoice_routes import register_invoice_routes
 from services.repository import bootstrap
 
@@ -29,6 +29,7 @@ app = dash.Dash(
     title="ZCAMS",
 )
 server = app.server
+auth.configure_server(server)
 register_invoice_routes(server)
 
 # Register page modules without Dash's built-in page_container router
@@ -66,8 +67,19 @@ _reviewed_bl_module = _resolve_loaded_page_module("reviewed_bl")
 detach_zsad_modal = _reviewed_bl_module.detach_zsad_modal
 invoice_request_modal = _reviewed_bl_module.invoice_request_modal
 
-PUBLIC_PATHS = {"/login", "/onboarding", "/contract-sign"}
-WORKFLOW_HIDDEN = {"/notifications", "/support", "/chat", "/gn83", "/contracts", "/company-profile", "/contract-sign"}
+PUBLIC_PATHS = auth.PUBLIC_PATHS
+WORKFLOW_HIDDEN = {
+    "/super-admin",
+    "/admin",
+    "/change-password",
+    "/notifications",
+    "/support",
+    "/chat",
+    "/gn83",
+    "/contracts",
+    "/company-profile",
+    "/contract-sign",
+}
 THEME_DEFAULT_VERSION = "white-default-v2"
 
 
@@ -96,7 +108,7 @@ def _resolve_page_layout(pathname: str):
 app.layout = html.Div(
     [
         dcc.Location(id="_pages_location", refresh="callback-nav"),
-        dcc.Store(id="auth-user", storage_type="local"),
+        dcc.Store(id="auth-user", storage_type="memory"),
         dcc.Store(id="theme-mode", data="light", storage_type="memory"),
         dcc.Store(id="theme-defaulted", data=None, storage_type="memory"),
         dcc.Store(id="invoice-request-reviewed"),
@@ -111,18 +123,19 @@ app.layout = html.Div(
             id="app-root",
             className="zcams-public-shell theme-light",
             children=[
-                html.Div(id="super-admin-banner-slot"),
                 html.Div(id="sidebar-slot"),
                 html.Div(
                     id="main-stack",
                     className="main-area",
                     children=[
+                        html.Div(id="super-admin-banner-slot"),
                         html.Div(id="workflow-strip-slot"),
                         html.Div(
                             id="page-slot",
                             className="page-slot",
                             children=_resolve_page_layout("/login"),
                         ),
+                        html.Div(id="hash-scroll-sentinel", style={"display": "none"}),
                     ],
                 ),
             ],
@@ -182,6 +195,14 @@ app.validation_layout = html.Div(
                 html.Button(id="agentic-start-execution", n_clicks=0, type="button"),
                 dcc.Checklist(id="agentic-human-approval"),
                 html.Button(id="agentic-approve-send", n_clicks=0, type="button"),
+                html.Button(id="profile-users-prev", n_clicks=0, type="button"),
+                html.Button(id="profile-users-next", n_clicks=0, type="button"),
+                html.Div(id="profile-users-results"),
+                dcc.Store(id="profile-users-page"),
+                html.Button(id="profile-docs-prev", n_clicks=0, type="button"),
+                html.Button(id="profile-docs-next", n_clicks=0, type="button"),
+                html.Div(id="profile-docs-results"),
+                dcc.Store(id="profile-docs-page"),
             ],
         ),
     ]
@@ -189,6 +210,37 @@ app.validation_layout = html.Div(
 
 
 # Settlement choice cards are in the root modal — handled by server callbacks in reviewed_bl.py.
+
+app.clientside_callback(
+    """
+    function(hashValue, pathname) {
+        if (!hashValue) {
+            return "";
+        }
+        const targetId = String(hashValue).replace(/^#/, "");
+        window.setTimeout(function() {
+            const target = document.getElementById(targetId);
+            if (target) {
+                target.scrollIntoView({behavior: "smooth", block: "start"});
+            }
+        }, 120);
+        return targetId;
+    }
+    """,
+    Output("hash-scroll-sentinel", "children"),
+    Input("_pages_location", "hash"),
+    Input("_pages_location", "pathname"),
+)
+
+
+@callback(
+    Output("auth-user", "data"),
+    Input("_pages_location", "pathname"),
+    prevent_initial_call=False,
+)
+def restore_session_user(_pathname: str | None):
+    """Hydrate Dash auth state from the server-side session cookie."""
+    return auth.current_user()
 
 
 @callback(
@@ -199,20 +251,50 @@ app.validation_layout = html.Div(
     prevent_initial_call=False,
 )
 def render_page(pathname: str | None, user: dict | None):
-    """Render page content on navigation; skip rebuilds that would flash the login form."""
+    """Render page content on navigation; enforce authentication and RBAC."""
     pathname = pathname or "/"
     triggered = _callback_trigger()
 
-    if pathname == "/":
-        return no_update, "/login"
-
-    if pathname not in PUBLIC_PATHS and not user:
+    if pathname == "/logout":
+        auth.logout_current_session()
         return _resolve_page_layout("/login"), "/login"
 
-    if pathname in PUBLIC_PATHS and triggered == "auth-user":
+    if pathname == "/":
+        return no_update, auth.default_home(user.get("role") if user else None) if user else "/login"
+
+    if not user:
+        if pathname not in PUBLIC_PATHS:
+            return _resolve_page_layout("/login"), "/login"
+        if triggered == "_pages_location":
+            return _resolve_page_layout(pathname), no_update
         return no_update, no_update
 
-    if triggered == "_pages_location":
+    if user.get("must_change_password") and pathname != "/change-password":
+        return _resolve_page_layout("/change-password"), "/change-password"
+
+    if pathname == "/login":
+        return no_update, auth.default_home(user.get("role"))
+
+    if pathname == "/change-password" and not user.get("must_change_password"):
+        return no_update, auth.default_home(user.get("role"))
+
+    if pathname not in PUBLIC_PATHS and not auth.path_allowed(user.get("role"), pathname):
+        home = auth.default_home(user.get("role"))
+        denied = html.Div(
+            [
+                html.H2("Access restricted"),
+                html.P(
+                    f"Your role ({auth.role_label(user.get('role'))}) cannot open this module. "
+                    f"You were redirected to {home}.",
+                    className="muted",
+                ),
+                dcc.Link("Continue", href=home, className="btn-primary"),
+            ],
+            className="card section-card page-content",
+        )
+        return denied, home
+
+    if triggered in ("_pages_location", "auth-user"):
         return _resolve_page_layout(pathname), no_update
 
     return no_update, no_update
@@ -225,6 +307,7 @@ def render_page(pathname: str | None, user: dict | None):
 )
 def logout_from_query(search: str | None):
     if search and "logout=1" in search:
+        auth.logout_current_session()
         return None
     raise PreventUpdate
 
@@ -242,12 +325,23 @@ def _theme_value(theme_mode: str | dict | None) -> str:
     Output("app-root", "className"),
     Output("zcams-root", "className"),
     Input("_pages_location", "pathname"),
+    Input("_pages_location", "hash"),
     Input("auth-user", "data"),
     Input("theme-mode", "data"),
     prevent_initial_call=False,
 )
-def render_app_chrome(pathname: str | None, user: dict | None, theme_mode: str | dict | None):
+def render_app_chrome(
+    pathname: str | None,
+    hash_value: str | None = None,
+    user: dict | None = None,
+    theme_mode: str | dict | None = None,
+):
+    if isinstance(hash_value, dict):
+        theme_mode = user
+        user = hash_value
+        hash_value = None
     pathname = pathname or "/"
+    nav_pathname = f"{pathname}{hash_value or ''}"
     theme = _theme_value(theme_mode)
     triggered = _callback_trigger()
 
@@ -263,7 +357,7 @@ def render_app_chrome(pathname: str | None, user: dict | None, theme_mode: str |
 
     show_workflow = pathname not in WORKFLOW_HIDDEN
     return (
-        sidebar(pathname, user),
+        sidebar(nav_pathname, user),
         _super_admin_banner(user),
         workflow_strip(pathname) if show_workflow else None,
         shell_class,
@@ -335,6 +429,8 @@ def manage_theme(_clicks, _user, _pathname, theme_mode: str | dict | None, defau
 def toggle_agentic_modal(_open_clicks, _close_clicks, _pathname):
     trigger = ctx.triggered_id
     if trigger == "agentic-open":
+        if not _open_clicks:
+            raise PreventUpdate
         return (
             "modal-backdrop agentic-backdrop",
             {"status": "idle", "completed": []},

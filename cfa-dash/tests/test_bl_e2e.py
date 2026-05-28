@@ -13,6 +13,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 os.environ.setdefault("CAPITALPAY_MODE", "mock")
 
 from app import server
+from services import auth
 from services.ocr import extract_bl_fields, extract_text_pdf, parse_bl_text
 from services.db import connect
 from services.repository import (
@@ -22,6 +23,7 @@ from services.repository import (
     get_reviewed_bl,
     list_invoices,
     list_reviewed_bls,
+    authenticate_user,
 )
 
 
@@ -155,6 +157,9 @@ def test_e2e_bl_upload_zsad_invoice_pdf_download():
         assert Path(invoice["pdf_path"]).read_bytes()[:4] == b"%PDF"
 
         client = server.test_client()
+        user = authenticate_user("companyadmin", "demo123")
+        assert user
+        auth.install_client_session(client, user)
         response = client.get(f"/download/invoice/{invoice['id']}.pdf")
         assert response.status_code == 200
         assert response.mimetype == "application/pdf"

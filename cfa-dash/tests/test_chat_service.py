@@ -1,4 +1,5 @@
 from services.chat_service import answer_question
+from services import repository
 
 
 def test_chat_uses_faq_before_model(monkeypatch):
@@ -80,3 +81,21 @@ def test_chat_strips_model_prompt_echo(monkeypatch):
     result = answer_question("What is a customs data platform?")
 
     assert result["answer"] == "ASYCUDA stands for Automated System for Customs Data."
+
+
+def test_repository_chat_answer_records_quality(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+    repository.bootstrap()
+
+    question = "What is a Z-SAD regression quality marker?"
+    answer = repository.chat_answer(
+        question,
+        user={"id": repository.DEMO_USER_ID, "company_id": repository.DEMO_COMPANY_ID},
+    )
+    events = repository.list_chat_events(search="regression quality marker", limit=5)
+
+    assert "single-use" in answer
+    assert events
+    assert events[0]["question"] == question
+    assert events[0]["quality"] == "Good Response"
+    assert events[0]["mode"] == "faq"
