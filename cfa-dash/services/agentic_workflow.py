@@ -239,18 +239,26 @@ def agentic_guidance(extracted: dict | None) -> str:
     return f"Draft BL {extracted.get('bl_number') or '-'} extracted. {risk}"
 
 
+def invoice_checkout_url(invoice_id: str) -> str:
+    return f"/capitalpay/checkout/{invoice_id}"
+
+
 def summarize_result(invoice: dict, reviewed: dict, share_results: dict) -> dict[str, Any]:
     quote = gn83_quote_for_reviewed(reviewed)
     return {
+        "invoice_id": invoice.get("id"),
         "bl_number": invoice.get("bl_number"),
         "z_sad_number": invoice.get("z_sad_number"),
         "invoice_number": invoice.get("invoice_number"),
         "invoice_type": invoice.get("invoice_type"),
+        "capitalpay_ref": repository.invoice_capitalpay_number(invoice),
         "total": invoice.get("total"),
+        "payable_amount": invoice.get("payable_amount") or invoice.get("total"),
         "std_min_fee": invoice.get("std_min_fee"),
         "gn83_category": quote.get("category"),
         "units": quote.get("units"),
         "pdf_url": repository.invoice_download_url(invoice["id"]),
+        "pay_now_url": invoice_checkout_url(invoice["id"]),
         "whatsapp_url": (share_results.get("whatsapp") or {}).get("url"),
         "email": share_results.get("email"),
     }

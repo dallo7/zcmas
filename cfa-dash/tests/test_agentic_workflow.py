@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 os.environ.setdefault("CAPITALPAY_MODE", "mock")
+os.environ.setdefault("ZCAMS_ALLOW_MOCK_CAPITALPAY", "true")
 
 from services import agentic_workflow, repository
 from services.db import connect
@@ -111,6 +112,10 @@ def test_agentic_lcl_guardrail_keeps_flat_gn83_fee():
         assert lookup_fee("Import", "Sea", "LOOSE_LCL", no_containers=parsed.get("no_containers")) == 90.0
 
 
+def test_agentic_invoice_checkout_url_uses_capitalpay_route():
+    assert agentic_workflow.invoice_checkout_url("inv-agentic-pay") == "/capitalpay/checkout/inv-agentic-pay"
+
+
 def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
     pdf, expected = BL_CASES[0]
     if not pdf.is_file():
@@ -155,9 +160,12 @@ def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
         assert summary["bl_number"] == expected["bl_number"]
         assert summary["z_sad_number"].startswith("Z-SAD-")
         assert summary["total"] == expected["service_total"]
+        assert summary["capitalpay_ref"].startswith("CPAY")
+        assert summary["payable_amount"] == expected["service_total"]
         assert summary["whatsapp_url"].startswith("https://wa.me/")
         assert summary["email"]["sent"] is True
         assert "download/invoice" in summary["pdf_url"]
+        assert summary["pay_now_url"].startswith("/capitalpay/checkout/")
     finally:
         _cleanup_bl([expected["bl_number"]])
 

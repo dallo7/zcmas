@@ -195,6 +195,8 @@ app.validation_layout = html.Div(
                 html.Button(id="agentic-start-execution", n_clicks=0, type="button"),
                 dcc.Checklist(id="agentic-human-approval"),
                 html.Button(id="agentic-approve-send", n_clicks=0, type="button"),
+                html.Button(id="agentic-pay-now-open", n_clicks=0, type="button"),
+                dcc.Store(id="agentic-pay-now-url"),
                 html.Button(id="profile-users-prev", n_clicks=0, type="button"),
                 html.Button(id="profile-users-next", n_clicks=0, type="button"),
                 html.Div(id="profile-users-results"),
@@ -230,6 +232,20 @@ app.clientside_callback(
     Output("hash-scroll-sentinel", "children"),
     Input("_pages_location", "hash"),
     Input("_pages_location", "pathname"),
+)
+
+
+app.clientside_callback(
+    """
+    function(url) {
+        if (!url) { return window.dash_clientside.no_update; }
+        try { window.open(url, '_blank', 'noopener'); } catch (e) {}
+        return '';
+    }
+    """,
+    Output("agentic-pay-now-url", "data", allow_duplicate=True),
+    Input("agentic-pay-now-url", "data"),
+    prevent_initial_call=True,
 )
 
 
@@ -762,6 +778,34 @@ def approve_agentic_invoice_send(_clicks, approval, review_data, state):
         )
 
 
+@callback(
+    Output("agentic-pay-now-url", "data", allow_duplicate=True),
+    Output("agentic-human-review", "children", allow_duplicate=True),
+    Output("agentic-validation-result", "children", allow_duplicate=True),
+    Input("agentic-pay-now-open", "n_clicks"),
+    State("agentic-invoice-review", "data"),
+    prevent_initial_call=True,
+)
+def open_agentic_pay_now(_clicks, review_data):
+    if not review_data:
+        raise PreventUpdate
+    invoice = repository.get_invoice(review_data["invoice_id"])
+    reviewed = repository.get_reviewed_bl(review_data["reviewed_id"])
+    summary = agentic_workflow.summarize_result(invoice, reviewed, {})
+    capitalpay_ref = summary.get("capitalpay_ref") or ""
+    if not capitalpay_ref or capitalpay_ref == "-" or capitalpay_ref.startswith("CPAYMOCK"):
+        return (
+            no_update,
+            no_update,
+            html.Div("CapitalPay has not returned a real production reference for this invoice. Regenerate with production CapitalPay enabled.", className="notice error"),
+        )
+    return (
+        summary.get("pay_now_url"),
+        _agentic_human_review_panel(summary, review_data, show_payment_ref=True),
+        html.Div("CapitalPay checkout opened. Confirm the payment reference and amount before paying.", className="notice success"),
+    )
+
+
 def _agentic_invoice_review_summary(summary: dict):
     return html.Div(
         [
@@ -783,8 +827,20 @@ def _agentic_invoice_review_summary(summary: dict):
     )
 
 
-def _agentic_human_review_panel(summary: dict, review_data: dict):
+def _agentic_payment_ref_line(summary: dict):
+    capitalpay_ref = summary.get("capitalpay_ref") or "-"
+    if str(capitalpay_ref).startswith("CPAYMOCK"):
+        return None
+    return html.P(
+        f"CapitalPay ref: {capitalpay_ref} | Amount: {repository.money(summary.get('payable_amount') or summary.get('total') or 0)}",
+        className="field-hint",
+        style={"color": "#111827", "fontWeight": "500"},
+    )
+
+
+def _agentic_human_review_panel(summary: dict, review_data: dict, show_payment_ref: bool = False):
     channels = ", ".join(review_data.get("channels") or [])
+    payment_ref_line = _agentic_payment_ref_line(summary) if show_payment_ref else None
     return html.Div(
         [
             html.H3("4. Human invoice review before send-out"),
@@ -804,10 +860,23 @@ def _agentic_human_review_panel(summary: dict, review_data: dict):
             html.Div(
                 [
                     html.A([icon("lucide:download", 14), "Download invoice PDF"], href=summary.get("pdf_url"), target="_blank", className="btn-primary"),
+                    html.Button(
+                        [icon("lucide:credit-card", 14), "Pay Now"],
+                        id="agentic-pay-now-open",
+                        n_clicks=0,
+                        type="button",
+                        className="btn-secondary",
+                        title="Open CapitalPay checkout in a new tab after human invoice review",
+                    ),
                     html.A([icon("lucide:receipt", 14), "Open invoice register"], href="/invoices", className="btn-secondary"),
                 ],
                 className="row-actions",
             ),
+            html.P(
+                "Pay Now opens CapitalPay in a new tab for this generated invoice only. It does not send the invoice to the client; use the approval step below for client notification.",
+                className="muted",
+            ),
+            payment_ref_line,
             dcc.Checklist(
                 id="agentic-human-approval",
                 options=[
@@ -850,6 +919,15 @@ def _agentic_summary(summary: dict):
     actions = [
         html.A([icon("lucide:download", 14), "Download invoice PDF"], href=summary.get("pdf_url"), target="_blank", className="btn-primary"),
     ]
+    if summary.get("pay_now_url"):
+        actions.append(
+            html.A(
+                [icon("lucide:credit-card", 14), "Pay Now"],
+                href=summary["pay_now_url"],
+                target="_blank",
+                className="btn-secondary",
+            )
+        )
     if summary.get("whatsapp_url"):
         actions.append(html.A([icon("lucide:send", 14), "Open WhatsApp"], href=summary["whatsapp_url"], target="_blank", className="btn-secondary"))
     return html.Div(
@@ -872,6 +950,7 @@ def _agentic_summary(summary: dict):
                     _agentic_summary_grid(summary),
                 ],
             ),
+            _agentic_payment_ref_line(summary),
             html.Div(actions, className="row-actions"),
         ],
         className="agentic-summary-card",

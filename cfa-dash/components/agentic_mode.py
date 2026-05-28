@@ -36,6 +36,7 @@ def agentic_modal():
             dcc.Store(id="agentic-uploaded-file"),
             dcc.Store(id="agentic-run-state", data={"status": "idle", "completed": []}),
             dcc.Store(id="agentic-invoice-review", data=None),
+            dcc.Store(id="agentic-pay-now-url"),
             dcc.Interval(id="agentic-workflow-interval", interval=900, disabled=True, n_intervals=0),
             html.Div(
                 [

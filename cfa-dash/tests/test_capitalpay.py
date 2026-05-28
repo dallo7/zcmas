@@ -9,6 +9,7 @@ from services.capitalpay import (
     capitalpay_payable_amount,
     clear_token_cache,
     create_signed_invoice,
+    fetch_checkout_page,
 )
 
 
@@ -97,7 +98,7 @@ def test_create_signed_invoice_uses_api_invoice_number(mock_post):
     assert len(create_call.kwargs["json"]["items"]) == 1
 
 
-@patch.dict(os.environ, {"CAPITALPAY_MODE": "mock"}, clear=False)
+@patch.dict(os.environ, {"CAPITALPAY_MODE": "mock", "ZCAMS_ALLOW_MOCK_CAPITALPAY": "true"}, clear=False)
 def test_mock_mode_uses_cpaysmock_prefix():
     result = create_signed_invoice(
         client_invoice_ref="INV-MOCK",
@@ -108,6 +109,29 @@ def test_mock_mode_uses_cpaysmock_prefix():
     )
     assert result["invoice_number"].startswith("CPAYMOCK")
     assert result["mode"] == "mock"
+
+
+@patch.dict(
+    os.environ,
+    {
+        "CAPITALPAY_MODE": "mock",
+        "ZCAMS_ALLOW_MOCK_CAPITALPAY": "true",
+        "CAPITALPAY_CHECKOUT_URL": "https://app.capitalpay.co.tz/PaymentAPI/invoice/checkout",
+    },
+    clear=False,
+)
+@patch("services.capitalpay.requests.post")
+def test_checkout_page_always_uses_capitalpay_endpoint(mock_post):
+    response = MagicMock()
+    response.ok = True
+    response.text = "<html>CapitalPay checkout</html>"
+    mock_post.return_value = response
+
+    html = fetch_checkout_page({"billRefNumber": "CPAYREAL", "amountExpected": "35.00"})
+
+    assert html == "<html>CapitalPay checkout</html>"
+    mock_post.assert_called_once()
+    assert mock_post.call_args.args[0] == "https://app.capitalpay.co.tz/PaymentAPI/invoice/checkout"
 
 
 @patch.dict(os.environ, {"CAPITALPAY_MODE": "real", "CAPITALPAY_KEY": "", "CAPITALPAY_SECRET": ""}, clear=False)

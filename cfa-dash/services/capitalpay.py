@@ -22,7 +22,7 @@ _TOKEN_CACHE: dict[str, Any] = {}
 
 
 def _mock_enabled() -> bool:
-    """Return True only when CAPITALPAY_MODE is explicitly 'mock'.
+    """Return True only for explicit test/demo runs.
 
     Production must always sign through the real CapitalPay API. We never
     silently fall back to mock just because credentials are missing — that
@@ -30,7 +30,9 @@ def _mock_enabled() -> bool:
     importers. Missing creds raise CapitalPayError downstream instead.
     """
     mode = os.getenv("CAPITALPAY_MODE", "real").strip().lower()
-    return mode == "mock"
+    allow_mock = os.getenv("ZCAMS_ALLOW_MOCK_CAPITALPAY", "").strip().lower() in {"1", "true", "yes"}
+    running_tests = bool(os.getenv("PYTEST_CURRENT_TEST"))
+    return mode == "mock" and (allow_mock or running_tests)
 
 
 def _base_url() -> str:
@@ -390,18 +392,6 @@ def build_checkout_params(
 
 
 def fetch_checkout_page(params: dict[str, str]) -> str:
-    if _mock_enabled():
-        ref = params.get("billRefNumber") or "CPAYMOCK"
-        amount = params.get("amountExpected") or "0.00"
-        return f"""
-        <!doctype html>
-        <html><body style="font-family:Arial;padding:32px">
-        <h2>CapitalPay Mock Checkout</h2>
-        <p>Payment Ref: <strong>{ref}</strong></p>
-        <p>Total Bill: <strong>USD {amount}</strong></p>
-        <p>Mock mode is enabled. No real payment was attempted.</p>
-        </body></html>
-        """
     response = requests.post(_checkout_url(), data=params, timeout=45)
     if not response.ok:
         raise CapitalPayError(f"CapitalPay checkout failed (HTTP {response.status_code}): {response.text[:300]}")
