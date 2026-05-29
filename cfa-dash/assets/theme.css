@@ -2721,6 +2721,23 @@ body {
   background: linear-gradient(135deg, rgba(245, 183, 0, 0.28), rgba(255, 255, 255, 0.08), rgba(25, 138, 0, 0.18));
   opacity: 0.72;
   filter: blur(1px);
+  animation: loginGlowPulse 5.5s ease-in-out infinite;
+  will-change: opacity, transform, filter;
+}
+
+@keyframes loginGlowPulse {
+  0%,
+  100% {
+    opacity: 0.58;
+    filter: blur(1px);
+    transform: scale(0.985);
+  }
+
+  50% {
+    opacity: 0.86;
+    filter: blur(7px);
+    transform: scale(1.015);
+  }
 }
 
 .login-card {
@@ -2849,6 +2866,12 @@ body {
 
   .public-panel::before {
     inset: -10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-panel::before {
+    animation: none;
   }
 }
 
