@@ -112,8 +112,11 @@ def test_agentic_lcl_guardrail_keeps_flat_gn83_fee():
         assert lookup_fee("Import", "Sea", "LOOSE_LCL", no_containers=parsed.get("no_containers")) == 90.0
 
 
-def test_agentic_invoice_checkout_url_uses_capitalpay_route():
-    assert agentic_workflow.invoice_checkout_url("inv-agentic-pay") == "/capitalpay/checkout/inv-agentic-pay"
+def test_agentic_invoice_checkout_url_reuses_signed_capitalpay_ref():
+    assert (
+        agentic_workflow.invoice_checkout_url({"capitalpay_urn": "CPAYAGENTIC"})
+        == "https://app.capitalpay.co.tz/pay/CPAYAGENTIC"
+    )
 
 
 def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
@@ -165,7 +168,7 @@ def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
         assert summary["whatsapp_url"].startswith("https://wa.me/")
         assert summary["email"]["sent"] is True
         assert "download/invoice" in summary["pdf_url"]
-        assert summary["pay_now_url"].startswith("/capitalpay/checkout/")
+        assert summary["pay_now_url"].startswith("https://app.capitalpay.co.tz/pay/")
     finally:
         _cleanup_bl([expected["bl_number"]])
 

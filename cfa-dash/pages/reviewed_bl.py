@@ -1456,7 +1456,7 @@ def submit_invoice_pay_now(
         _invoice_logger.exception("Pay Now invoice generation failed")
         return html.Div(f"Pay Now failed: {exc.__class__.__name__}: {exc}", className="notice error"), no_update
 
-    checkout_url = f"/capitalpay/checkout/{invoice['id']}"
+    checkout_url = repository.invoice_pay_url(invoice)
     result = html.Div(
         [
             html.Div(
@@ -1465,7 +1465,7 @@ def submit_invoice_pay_now(
             ),
             html.A(
                 [icon("lucide:external-link", 14), "Open CapitalPay Checkout"],
-                href=checkout_url,
+                href=checkout_url or "/checkout",
                 target="_blank",
                 rel="noopener noreferrer",
                 className="btn-primary",

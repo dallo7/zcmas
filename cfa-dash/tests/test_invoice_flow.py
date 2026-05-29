@@ -14,6 +14,7 @@ from services.repository import (
     create_bl,
     generate_invoice,
     get_reviewed_bl,
+    invoice_capitalpay_number,
     invoice_share_message,
     invoice_whatsapp_link,
     list_reviewed_bls,
@@ -75,6 +76,8 @@ def test_generate_and_share_invoice_links(mock_send_email):
         contact_email="importer@example.com",
     )
     assert invoice["capitalpay_urn"].startswith("CPAY")
+    assert invoice["capitalpay_ref"] == invoice["capitalpay_urn"]
+    assert invoice_capitalpay_number(invoice) == invoice["capitalpay_urn"]
     pdf_path = invoice.get("pdf_path") or ""
     assert pdf_path.endswith(".pdf")
     assert Path(pdf_path).is_file()
