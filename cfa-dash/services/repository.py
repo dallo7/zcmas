@@ -2297,7 +2297,7 @@ def get_invoice(invoice_id: str) -> dict:
         """
         SELECT inv.*, rb.bl_id, bl.bl_number, bl.consignee_name, bl.consignee_tin, bl.company_id,
                zs.z_sad_number, pay.secure_link, pay.status AS payment_status,
-               pay.amount AS payment_amount, pay.capitalpay_ref
+               pay.amount AS payment_amount
         FROM invoices inv
         JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
         JOIN bills_of_lading bl ON bl.id = rb.bl_id
