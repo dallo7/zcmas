@@ -30,7 +30,7 @@ def _capture_field(label: str, control, *, span: int = 1) -> html.Div:
 
 UPLOAD_PROGRESS_STAGES = [
     (20, "Uploading document…"),
-    (55, "Running OCR extraction…"),
+    (55, "Extracting BL fields…"),
     (100, "OCR complete"),
 ]
 
@@ -447,6 +447,21 @@ def _detach_body(conflict: dict) -> list:
     Output("bl-upload-progress", "children"),
     Output("bl-review-prompt", "children"),
     Output("bl-ocr-result", "children", allow_duplicate=True),
+    Output("bl-uploaded-file", "data"),
+    Output("bl-extracted-data", "data"),
+    Output("bl_number", "value"),
+    Output("doc_type", "value"),
+    Output("route_type", "value"),
+    Output("transport_mode", "value"),
+    Output("zra_regime", "value"),
+    Output("consignee_name", "value"),
+    Output("consignee_tin", "value"),
+    Output("origin", "value"),
+    Output("destination", "value"),
+    Output("no_containers", "value"),
+    Output("gross_weight", "value"),
+    Output("cargo_description", "value"),
+    Output("gn83_category", "value"),
     Input("bl-upload", "contents"),
     State("bl-upload", "filename"),
     prevent_initial_call=True,
@@ -464,74 +479,21 @@ def queue_bl_upload(contents, filename):
             html.Div(str(exc), className="notice error"),
             None,
             None,
-        )
-    pct, label = UPLOAD_PROGRESS_STAGES[0]
-    return (
-        {"path": str(file_path), "filename": filename, "ocr_done": False},
-        False,
-        0,
-        _progress_bar(pct, label),
-        None,
-        None,
-    )
-
-
-@callback(
-    Output("bl-uploaded-file", "data"),
-    Output("bl-extracted-data", "data"),
-    Output("bl-ocr-result", "children"),
-    Output("bl-upload-progress", "children", allow_duplicate=True),
-    Output("bl-review-prompt", "children", allow_duplicate=True),
-    Output("bl-upload-interval", "disabled", allow_duplicate=True),
-    Output("bl-upload-pending", "data", allow_duplicate=True),
-    Output("bl_number", "value"),
-    Output("doc_type", "value"),
-    Output("route_type", "value"),
-    Output("transport_mode", "value"),
-    Output("zra_regime", "value"),
-    Output("consignee_name", "value"),
-    Output("consignee_tin", "value"),
-    Output("origin", "value"),
-    Output("destination", "value"),
-    Output("no_containers", "value"),
-    Output("gross_weight", "value"),
-    Output("cargo_description", "value"),
-    Output("gn83_category", "value"),
-    Input("bl-upload-interval", "n_intervals"),
-    State("bl-upload-pending", "data"),
-    prevent_initial_call=True,
-)
-def run_bl_upload_progress(n_intervals, pending):
-    if not pending or pending.get("ocr_done"):
-        raise PreventUpdate
-
-    stage_idx = min(n_intervals, len(UPLOAD_PROGRESS_STAGES) - 1)
-    pct, label = UPLOAD_PROGRESS_STAGES[stage_idx]
-    progress = _progress_bar(pct, label)
-    review_prompt = _review_prompt_banner() if pct >= 55 and pct < 100 else None
-
-    if n_intervals < len(UPLOAD_PROGRESS_STAGES) - 1:
-        return (
-            no_update,
-            no_update,
-            no_update,
-            progress,
-            review_prompt,
-            no_update,
-            no_update,
-            *[no_update] * 13,
+            None,
+            *[None] * 13,
         )
 
     try:
-        extracted = ocr.extract_bl_fields(pending["path"])
+        extracted = ocr.extract_bl_fields(str(file_path))
     except ValueError as exc:
         return (
             None,
-            None,
+            True,
+            0,
             html.Div(str(exc), className="notice error"),
             None,
             None,
-            True,
+            None,
             None,
             *[None] * 13,
         )
@@ -550,13 +512,14 @@ def run_bl_upload_progress(n_intervals, pending):
     )
     done_pct, done_label = UPLOAD_PROGRESS_STAGES[-1]
     return (
-        {"path": pending["path"], "filename": pending.get("filename")},
-        extracted,
-        message,
-        _progress_bar(done_pct, done_label),
-        None,
+        {"path": str(file_path), "filename": filename, "ocr_done": True},
         True,
-        {**pending, "ocr_done": True},
+        0,
+        _progress_bar(done_pct, done_label),
+        _review_prompt_banner(),
+        message,
+        {"path": str(file_path), "filename": filename},
+        extracted,
         extracted.get("bl_number"),
         extracted.get("doc_type", "Bill of Lading"),
         extracted.get("route_type", "Import"),
