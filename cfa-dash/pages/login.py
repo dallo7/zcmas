@@ -61,10 +61,6 @@ def layout(**_kwargs):
                             html.Div(
                                 [
                                     html.H2("Sign In"),
-                                    html.P(
-                                        "Three ZCAMS roles: Super Admin (platform), Company Admin (tenant), "
-                                        "and Declarant / Agent (operational clearance only)."
-                                    ),
                                     html.Div(id="login-result"),
                                     html.Div(
                                         [
