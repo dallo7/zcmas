@@ -1971,8 +1971,11 @@ def detach_zsad_for_reupload(reviewed_id: str) -> dict:
 
 
 def invoice_download_url(invoice_id: str) -> str:
-    base = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/")
-    return f"{base}/download/invoice/{invoice_id}.pdf"
+    path = f"/download/invoice/{invoice_id}.pdf"
+    base = (os.getenv("PUBLIC_APP_URL") or "").strip().rstrip("/")
+    if not base or "127.0.0.1" in base or "localhost" in base:
+        return path
+    return f"{base}{path}"
 
 
 def invoice_gn83_total(invoice: dict) -> float:

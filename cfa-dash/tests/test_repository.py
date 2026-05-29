@@ -16,6 +16,7 @@ from services.repository import (
     get_system_user,
     parse_shipment_details,
     generate_zsad_number,
+    invoice_download_url,
     invoice_capitalpay_number,
     invoice_share_message,
     list_invoices_for_user,
@@ -72,6 +73,19 @@ def test_invoice_share_message_uses_gn83_total():
 def test_invoice_capitalpay_number_prefers_payment_ref():
     assert invoice_capitalpay_number({"capitalpay_ref": "CPAYABC", "capitalpay_urn": "urn:xyz"}) == "CPAYABC"
     assert invoice_capitalpay_number({"capitalpay_urn": "urn:xyz"}) == "urn:xyz"
+
+
+def test_invoice_download_url_uses_relative_path_for_localhost(monkeypatch):
+    monkeypatch.delenv("PUBLIC_APP_URL", raising=False)
+    assert invoice_download_url("inv-test") == "/download/invoice/inv-test.pdf"
+
+    monkeypatch.setenv("PUBLIC_APP_URL", "http://127.0.0.1:8050")
+    assert invoice_download_url("inv-test") == "/download/invoice/inv-test.pdf"
+
+
+def test_invoice_download_url_uses_public_host_when_configured(monkeypatch):
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://zcams.info")
+    assert invoice_download_url("inv-test") == "https://zcams.info/download/invoice/inv-test.pdf"
 
 
 def test_list_invoices_for_user_scopes_by_company():
