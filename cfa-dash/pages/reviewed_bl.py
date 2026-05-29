@@ -785,6 +785,7 @@ def invoice_request_modal():
                             id="invoice-request-submit",
                             className="btn-primary",
                             type="button",
+                            disabled=False,
                             style={"display": "none"},
                         ),
                         html.Button(
@@ -792,6 +793,7 @@ def invoice_request_modal():
                             id="invoice-pay-now-submit",
                             className="btn-secondary",
                             type="button",
+                            disabled=False,
                             style={"display": "none"},
                         ),
                     ],
@@ -1151,6 +1153,20 @@ def toggle_pay_now_button(step, submit_style):
 
 
 @callback(
+    Output("invoice-request-submit", "disabled", allow_duplicate=True),
+    Output("invoice-pay-now-submit", "disabled", allow_duplicate=True),
+    Input("invoice-request-reviewed", "data"),
+    Input("invoice-modal-step", "data"),
+    Input("invoice-request-modal", "className"),
+    prevent_initial_call=True,
+)
+def reset_invoice_action_buttons(_reviewed_data, _step, modal_class):
+    if "is-hidden" in str(modal_class or ""):
+        return False, False
+    return False, False
+
+
+@callback(
     Output("invoice-modal-zsad", "children"),
     Output("invoice-modal-bl", "children"),
     Output("invoice-full-fields", "style"),
@@ -1207,6 +1223,8 @@ def update_invoice_modal(data, mode, amount, step, bl_id):
 @callback(
     Output("invoice-request-result", "children", allow_duplicate=True),
     Output("invoice-share-whatsapp-url", "data", allow_duplicate=True),
+    Output("invoice-request-submit", "disabled", allow_duplicate=True),
+    Output("invoice-pay-now-submit", "disabled", allow_duplicate=True),
     Input("invoice-request-submit", "n_clicks"),
     State("invoice-request-reviewed", "data"),
     State("invoice-settlement-mode", "data"),
@@ -1251,6 +1269,8 @@ def submit_invoice_request(
                 className="notice error",
             ),
             no_update,
+            False,
+            False,
         )
     reviewed_id = reviewed["id"]
     channels = share_channels or ["WHATSAPP"]
@@ -1261,6 +1281,8 @@ def submit_invoice_request(
                 className="notice error",
             ),
             no_update,
+            False,
+            False,
         )
     if "EMAIL" in channels and not str(email or "").strip():
         return (
@@ -1269,6 +1291,8 @@ def submit_invoice_request(
                 className="notice error",
             ),
             no_update,
+            False,
+            False,
         )
 
     invoice_type = mode or "SERVICE_FEE_ONLY"
@@ -1282,6 +1306,8 @@ def submit_invoice_request(
                     className="notice error",
                 ),
                 no_update,
+                False,
+                False,
             )
         if "CONFIRMED" not in (confirmed or []):
             return (
@@ -1290,6 +1316,8 @@ def submit_invoice_request(
                     className="notice error",
                 ),
                 no_update,
+                False,
+                False,
             )
         std_override = float(amount or 0)
 
@@ -1312,6 +1340,7 @@ def submit_invoice_request(
             "Invoice generated: id=%s number=%s urn=%s",
             invoice.get("id"), invoice.get("invoice_number"), invoice.get("capitalpay_urn"),
         )
+        invoice = repository.prepare_capitalpay_checkout(invoice["id"])["invoice"]
         share_results = repository.share_invoice_with_importer(
             invoice["id"],
             channels=channels,
@@ -1320,7 +1349,7 @@ def submit_invoice_request(
         _invoice_logger.info("Share results: %s", share_results)
     except ValueError as exc:
         _invoice_logger.warning("Invoice generation rejected: %s", exc)
-        return html.Div(str(exc), className="notice error"), no_update
+        return html.Div(str(exc), className="notice error"), no_update, False, False
     except Exception as exc:  # noqa: BLE001 - surface unexpected failures to the user
         _invoice_logger.exception("Invoice generation failed unexpectedly")
         tb_text = traceback.format_exc(limit=4)
@@ -1341,6 +1370,8 @@ def submit_invoice_request(
                 ]
             ),
             no_update,
+            False,
+            False,
         )
 
     capitalpay_no = invoice.get("capitalpay_urn") or "-"
@@ -1378,24 +1409,20 @@ def submit_invoice_request(
                 className="btn-primary",
                 id={"type": "invoice-download-link", "id": invoice["id"]},
             ),
-            html.Button(
-                [icon("lucide:download", 14), "Save PDF to device"],
-                id={"type": "invoice-download-btn", "id": invoice["id"]},
-                className="btn-secondary",
-                type="button",
-            ),
             html.P("Share with the importer:", className="field-hint"),
             invoice_share_actions(invoice["id"], share_results),
         ],
         className="stack compact",
     )
     whatsapp_url = (share_results.get("whatsapp") or {}).get("url") if "WHATSAPP" in {c.upper() for c in channels} else None
-    return result, whatsapp_url
+    return result, whatsapp_url, True, True
 
 
 @callback(
     Output("invoice-request-result", "children", allow_duplicate=True),
     Output("invoice-pay-now-checkout-url", "data", allow_duplicate=True),
+    Output("invoice-request-submit", "disabled", allow_duplicate=True),
+    Output("invoice-pay-now-submit", "disabled", allow_duplicate=True),
     Input("invoice-pay-now-submit", "n_clicks"),
     State("invoice-request-reviewed", "data"),
     State("invoice-settlement-mode", "data"),
@@ -1426,17 +1453,17 @@ def submit_invoice_pay_now(
         raise PreventUpdate
     data, reviewed = _resolve_invoice_reviewed(data, bl_id)
     if not reviewed:
-        return html.Div("Select a reviewed BL before paying.", className="notice error"), no_update
+        return html.Div("Select a reviewed BL before paying.", className="notice error"), no_update, False, False
     if not str(phone or "").strip():
-        return html.Div("Enter a contact phone number before opening checkout.", className="notice error"), no_update
+        return html.Div("Enter a contact phone number before opening checkout.", className="notice error"), no_update, False, False
 
     invoice_type = mode or "SERVICE_FEE_ONLY"
     std_override = None
     if invoice_type == "FULL_SETTLEMENT":
         if any(not str(value or "").strip() for value in [beneficiary_name, bank_name, account_number]):
-            return html.Div("Enter all beneficiary bank details for Full Settlement.", className="notice error"), no_update
+            return html.Div("Enter all beneficiary bank details for Full Settlement.", className="notice error"), no_update, False, False
         if "CONFIRMED" not in (confirmed or []):
-            return html.Div("Confirm the beneficiary bank details before paying.", className="notice error"), no_update
+            return html.Div("Confirm the beneficiary bank details before paying.", className="notice error"), no_update, False, False
         std_override = float(amount or 0)
 
     try:
@@ -1451,17 +1478,25 @@ def submit_invoice_pay_now(
             beneficiary_account_number=str(account_number or "").strip() or None,
         )
     except ValueError as exc:
-        return html.Div(str(exc), className="notice error"), no_update
+        return html.Div(str(exc), className="notice error"), no_update, False, False
     except Exception as exc:  # noqa: BLE001
         _invoice_logger.exception("Pay Now invoice generation failed")
-        return html.Div(f"Pay Now failed: {exc.__class__.__name__}: {exc}", className="notice error"), no_update
+        return html.Div(f"Pay Now failed: {exc.__class__.__name__}: {exc}", className="notice error"), no_update, False, False
 
     checkout_url = f"/capitalpay/checkout/{invoice['id']}"
+    pdf_url = repository.invoice_download_url(invoice["id"])
     result = html.Div(
         [
             html.Div(
                 f"Invoice {invoice['invoice_number']} is ready for in-system payment. Open CapitalPay checkout to choose a bank/payment option.",
                 className="notice success",
+            ),
+            html.A(
+                [icon("lucide:download", 14), "Download signed invoice PDF"],
+                href=pdf_url,
+                target="_blank",
+                className="btn-primary",
+                id={"type": "invoice-download-link", "id": invoice["id"]},
             ),
             html.A(
                 [icon("lucide:external-link", 14), "Open CapitalPay Checkout"],
@@ -1470,14 +1505,10 @@ def submit_invoice_pay_now(
                 rel="noopener noreferrer",
                 className="btn-primary",
             ),
-            html.P(
-                f"CapitalPay ref: {invoice.get('capitalpay_urn') or '-'} | Amount: {repository.money(invoice.get('payable_amount') or invoice.get('total') or 0)}",
-                className="field-hint",
-            ),
         ],
         className="stack compact",
     )
-    return result, checkout_url
+    return result, checkout_url, True, True
 
 
 # Auto-open the WhatsApp share link in a new tab when an invoice is generated

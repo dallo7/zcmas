@@ -9,6 +9,7 @@ from services.capitalpay import (
     capitalpay_payable_amount,
     clear_token_cache,
     create_signed_invoice,
+    extract_checkout_payment_ref,
     fetch_checkout_page,
 )
 
@@ -132,6 +133,16 @@ def test_checkout_page_always_uses_capitalpay_endpoint(mock_post):
     assert html == "<html>CapitalPay checkout</html>"
     mock_post.assert_called_once()
     assert mock_post.call_args.args[0] == "https://app.capitalpay.co.tz/PaymentAPI/invoice/checkout"
+
+
+def test_extract_checkout_payment_ref_from_capitalpay_html():
+    html = """
+    <section>
+      <span>PAYMENT REF</span>
+      <strong>CPAYPQWRZP</strong>
+    </section>
+    """
+    assert extract_checkout_payment_ref(html) == "CPAYPQWRZP"
 
 
 @patch.dict(os.environ, {"CAPITALPAY_MODE": "real", "CAPITALPAY_KEY": "", "CAPITALPAY_SECRET": ""}, clear=False)

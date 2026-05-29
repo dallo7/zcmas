@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import os
 import random
+import re
 import string
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -85,6 +86,17 @@ def normalize_checkout_html(html: str) -> str:
     for private_host in private_hosts:
         html = html.replace(private_host, public_host)
     return html
+
+
+def extract_checkout_payment_ref(html: str) -> str | None:
+    """Extract the payment reference displayed by CapitalPay checkout."""
+    if not html:
+        return None
+    payment_ref_match = re.search(r"PAYMENT\s*REF.*?(CPAY[A-Z0-9]+)", html, flags=re.IGNORECASE | re.DOTALL)
+    if payment_ref_match:
+        return payment_ref_match.group(1).upper()
+    any_ref_match = re.search(r"\b(CPAY[A-Z0-9]{6,})\b", html, flags=re.IGNORECASE)
+    return any_ref_match.group(1).upper() if any_ref_match else None
 
 
 def capitalpay_payable_amount(calc_total: float) -> float:

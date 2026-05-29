@@ -14,9 +14,11 @@ from services.repository import (
     create_bl,
     generate_invoice,
     get_reviewed_bl,
+    get_invoice,
     invoice_share_message,
     invoice_whatsapp_link,
     list_reviewed_bls,
+    set_invoice_capitalpay_ref,
     review_bl,
     share_invoice_with_importer,
 )
@@ -95,3 +97,20 @@ def test_generate_and_share_invoice_links(mock_send_email):
     assert shared["sms"]["url"].startswith("sms:")
     assert shared["email"]["sent"] is True
     mock_send_email.assert_called()
+
+
+@patch.dict(os.environ, {"CAPITALPAY_MODE": "mock"}, clear=False)
+def test_checkout_ref_update_controls_invoice_display_and_pdf():
+    bootstrap()
+    reviewed = _reviewed_target()
+    invoice = generate_invoice(
+        reviewed["id"],
+        "SERVICE_FEE_ONLY",
+        contact_phone="0971234567",
+        contact_email="importer@example.com",
+    )
+    updated = set_invoice_capitalpay_ref(invoice["id"], "CPAYCHECKOUT")
+
+    assert updated["capitalpay_ref"] == "CPAYCHECKOUT"
+    assert updated["capitalpay_urn"] == "CPAYCHECKOUT"
+    assert get_invoice(invoice["id"])["capitalpay_ref"] == "CPAYCHECKOUT"

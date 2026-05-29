@@ -1989,6 +1989,32 @@ def invoice_capitalpay_number(invoice: dict) -> str:
     )
 
 
+_CHECKOUT_HTML_CACHE: dict[str, str] = {}
+_CHECKOUT_CACHE_DIR = DATA_DIR / "capitalpay-checkouts"
+
+
+def _checkout_cache_path(invoice_id: str) -> Path:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", str(invoice_id or "invoice"))
+    return _CHECKOUT_CACHE_DIR / f"{safe_id}.html"
+
+
+def _read_checkout_cache(invoice_id: str) -> str | None:
+    if invoice_id in _CHECKOUT_HTML_CACHE:
+        return _CHECKOUT_HTML_CACHE[invoice_id]
+    path = _checkout_cache_path(invoice_id)
+    if path.is_file():
+        html = path.read_text(encoding="utf-8", errors="replace")
+        _CHECKOUT_HTML_CACHE[invoice_id] = html
+        return html
+    return None
+
+
+def _write_checkout_cache(invoice_id: str, html: str) -> None:
+    _CHECKOUT_HTML_CACHE[invoice_id] = html
+    _CHECKOUT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _checkout_cache_path(invoice_id).write_text(html, encoding="utf-8")
+
+
 def invoice_pay_url(invoice: dict) -> str | None:
     """Importer payment link (secure link or CapitalPay checkout URL)."""
     fallback = "https://app.capitalpay.co.tz/pay/CPAYPKKEBP"
@@ -2001,6 +2027,58 @@ def invoice_pay_url(invoice: dict) -> str | None:
         if ref and not ref.startswith("CPAYMOCK"):
             return f"https://app.capitalpay.co.tz/pay/{ref}"
     return fallback
+
+
+def _capitalpay_checkout_params(invoice: dict) -> dict[str, str]:
+    bill_ref = invoice_capitalpay_number(invoice) or invoice.get("invoice_number")
+    amount = float(invoice.get("payable_amount") or invoice.get("total") or 0)
+    client_name = invoice.get("beneficiary_name") or invoice.get("consignee_name") or "ZCAMS Importer"
+    return capitalpay.build_checkout_params(
+        client_name=client_name,
+        client_msisdn=invoice.get("contact_phone"),
+        client_email=invoice.get("contact_email") or invoice.get("consignee_email"),
+        client_id_number=invoice.get("consignee_tin") or invoice.get("z_sad_number") or bill_ref,
+        amount=amount,
+        currency="USD",
+        bill_ref_number=bill_ref,
+        bill_desc=f"ZCAMS payment for {invoice.get('invoice_number')} | BL {invoice.get('bl_number')}",
+    )
+
+
+def set_invoice_capitalpay_ref(invoice_id: str, capitalpay_ref: str) -> dict:
+    """Persist the checkout reference displayed by CapitalPay and refresh the PDF."""
+    capitalpay_ref = str(capitalpay_ref or "").strip().upper()
+    if not capitalpay_ref:
+        return get_invoice(invoice_id)
+    with connect() as conn:
+        conn.execute("UPDATE invoices SET capitalpay_urn = ? WHERE id = ?", (capitalpay_ref, invoice_id))
+        conn.execute("UPDATE payments SET capitalpay_ref = ? WHERE invoice_id = ?", (capitalpay_ref, invoice_id))
+        conn.commit()
+    try:
+        ensure_invoice_pdf(invoice_id)
+    except Exception:
+        pass
+    return get_invoice(invoice_id)
+
+
+def prepare_capitalpay_checkout(invoice_id: str) -> dict:
+    """Prepare checkout once and align ZCAMS/PDF refs with CapitalPay's displayed payment ref."""
+    invoice = get_invoice(invoice_id)
+    if not invoice:
+        raise ValueError(f"Unknown invoice id: {invoice_id}")
+    cached_html = _read_checkout_cache(invoice_id)
+    if cached_html:
+        cached_ref = capitalpay.extract_checkout_payment_ref(cached_html)
+        if cached_ref and cached_ref != invoice_capitalpay_number(invoice):
+            invoice = set_invoice_capitalpay_ref(invoice_id, cached_ref)
+        return {"html": cached_html, "invoice": invoice, "payment_ref": invoice_capitalpay_number(invoice)}
+
+    html = capitalpay.fetch_checkout_page(_capitalpay_checkout_params(invoice))
+    checkout_ref = capitalpay.extract_checkout_payment_ref(html) or invoice_capitalpay_number(invoice)
+    if checkout_ref and checkout_ref != invoice_capitalpay_number(invoice):
+        invoice = set_invoice_capitalpay_ref(invoice_id, checkout_ref)
+    _write_checkout_cache(invoice_id, html)
+    return {"html": html, "invoice": invoice, "payment_ref": checkout_ref}
 
 
 def list_invoices_for_user(user: dict | None = None) -> list[dict]:
@@ -2297,7 +2375,7 @@ def get_invoice(invoice_id: str) -> dict:
         """
         SELECT inv.*, rb.bl_id, bl.bl_number, bl.consignee_name, bl.consignee_tin, bl.company_id,
                zs.z_sad_number, pay.secure_link, pay.status AS payment_status,
-               pay.amount AS payment_amount
+               pay.amount AS payment_amount, pay.capitalpay_ref
         FROM invoices inv
         JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
         JOIN bills_of_lading bl ON bl.id = rb.bl_id
