@@ -801,7 +801,7 @@ def open_agentic_pay_now(_clicks, review_data):
         )
     return (
         summary.get("pay_now_url"),
-        _agentic_human_review_panel(summary, review_data, show_payment_ref=True),
+        _agentic_human_review_panel(summary, review_data),
         html.Div("CapitalPay checkout opened. Confirm the payment reference and amount before paying.", className="notice success"),
     )
 
@@ -827,20 +827,8 @@ def _agentic_invoice_review_summary(summary: dict):
     )
 
 
-def _agentic_payment_ref_line(summary: dict):
-    capitalpay_ref = summary.get("capitalpay_ref") or "-"
-    if str(capitalpay_ref).startswith("CPAYMOCK"):
-        return None
-    return html.P(
-        f"CapitalPay ref: {capitalpay_ref} | Amount: {repository.money(summary.get('payable_amount') or summary.get('total') or 0)}",
-        className="field-hint",
-        style={"color": "#111827", "fontWeight": "500"},
-    )
-
-
-def _agentic_human_review_panel(summary: dict, review_data: dict, show_payment_ref: bool = False):
+def _agentic_human_review_panel(summary: dict, review_data: dict):
     channels = ", ".join(review_data.get("channels") or [])
-    payment_ref_line = _agentic_payment_ref_line(summary) if show_payment_ref else None
     return html.Div(
         [
             html.H3("4. Human invoice review before send-out"),
@@ -876,7 +864,6 @@ def _agentic_human_review_panel(summary: dict, review_data: dict, show_payment_r
                 "Pay Now opens CapitalPay in a new tab for this generated invoice only. It does not send the invoice to the client; use the approval step below for client notification.",
                 className="muted",
             ),
-            payment_ref_line,
             dcc.Checklist(
                 id="agentic-human-approval",
                 options=[
@@ -950,7 +937,6 @@ def _agentic_summary(summary: dict):
                     _agentic_summary_grid(summary),
                 ],
             ),
-            _agentic_payment_ref_line(summary),
             html.Div(actions, className="row-actions"),
         ],
         className="agentic-summary-card",
