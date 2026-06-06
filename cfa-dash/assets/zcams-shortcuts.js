@@ -6,7 +6,7 @@
     if (event.key !== "Escape") {
       return;
     }
-    ["invoice-request-modal", "detach-zsad-modal"].forEach(function (modalId) {
+    ["invoice-request-modal", "detach-zsad-modal", "bl-detach-modal"].forEach(function (modalId) {
       const modal = document.getElementById(modalId);
       if (!modal || modal.classList.contains("is-hidden")) {
         return;

@@ -592,27 +592,6 @@ def _detach_body(conflict: dict) -> list:
     ]
 
 
-def _detach_success_body(conflict: dict) -> html.Div:
-    bl_no = repository.display_bl_number(conflict)
-    zsad = conflict.get("z_sad_number") or "-"
-    return html.Div(
-        [
-            html.Div(
-                [
-                    html.Strong("Detach successful"),
-                    html.P(
-                        f"BL {bl_no} has been cancelled and Z-SAD {zsad} retired. "
-                        "Any open invoices were cancelled. You can now save a new upload with the same BL number.",
-                        className="section-lead",
-                    ),
-                ],
-                className="notice success",
-            ),
-        ],
-        className="stack compact",
-    )
-
-
 @callback(
     Output("bl-upload-pending", "data"),
     Output("bl-upload-interval", "disabled"),
@@ -765,36 +744,17 @@ def toggle_other_reason(reason):
 
 
 @callback(
-    Output("bl-duplicate-conflict", "data"),
-    Output("bl-detach-modal", "className"),
-    Output("bl-detach-body", "children"),
-    Output("bl-detach-form", "style"),
-    Output("bl-cancel-reason", "value", allow_duplicate=True),
-    Output("bl-cancel-reason-detail", "value", allow_duplicate=True),
-    Input("bl-open-detach", "n_clicks"),
-    Input("bl-detach-close", "n_clicks"),
-    Input("bl-detach-close-secondary", "n_clicks"),
-    State("bl-duplicate-conflict", "data"),
-    prevent_initial_call=True,
-)
-def toggle_detach_modal(open_clicks, close_clicks, close2_clicks, conflict):
-    trigger = ctx.triggered_id
-    if trigger in {"bl-detach-close", "bl-detach-close-secondary"}:
-        return None, "modal-backdrop is-hidden", None, _DETACH_FORM_VISIBLE, None, None
-    if not conflict:
-        raise PreventUpdate
-    return conflict, "modal-backdrop", _detach_body(conflict), _DETACH_FORM_VISIBLE, no_update, no_update
-
-
-@callback(
     Output("bl-result", "children", allow_duplicate=True),
     Output("bl-table", "children", allow_duplicate=True),
     Output("bl-duplicate-conflict", "data", allow_duplicate=True),
-    Output("bl-detach-modal", "className", allow_duplicate=True),
-    Output("bl-detach-body", "children", allow_duplicate=True),
-    Output("bl-detach-form", "style", allow_duplicate=True),
+    Output("bl-detach-modal", "className"),
+    Output("bl-detach-body", "children"),
+    Output("bl-detach-form", "style"),
     Output("bl-cancel-reason", "value"),
     Output("bl-cancel-reason-detail", "value"),
+    Input("bl-open-detach", "n_clicks"),
+    Input("bl-detach-close", "n_clicks"),
+    Input("bl-detach-close-secondary", "n_clicks"),
     Input("bl-detach-submit", "n_clicks"),
     State("bl-duplicate-conflict", "data"),
     State("bl-cancel-reason", "value"),
@@ -802,9 +762,44 @@ def toggle_detach_modal(open_clicks, close_clicks, close2_clicks, conflict):
     State("auth-user", "data"),
     prevent_initial_call=True,
 )
-def submit_detach_cancel(_clicks, conflict, reason, reason_detail, user):
-    if not conflict:
+def manage_detach_modal(
+    _open_clicks,
+    _close_clicks,
+    _close2_clicks,
+    _submit_clicks,
+    conflict,
+    reason,
+    reason_detail,
+    user,
+):
+    trigger = ctx.triggered_id
+    if trigger in {"bl-detach-close", "bl-detach-close-secondary"}:
+        return (
+            no_update,
+            no_update,
+            None,
+            "modal-backdrop is-hidden",
+            None,
+            _DETACH_FORM_VISIBLE,
+            None,
+            None,
+        )
+    if trigger == "bl-open-detach":
+        if not conflict:
+            raise PreventUpdate
+        return (
+            no_update,
+            no_update,
+            conflict,
+            "modal-backdrop",
+            _detach_body(conflict),
+            _DETACH_FORM_VISIBLE,
+            no_update,
+            no_update,
+        )
+    if trigger != "bl-detach-submit" or not conflict:
         raise PreventUpdate
+
     company_id = (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
     cancelled_by = (user or {}).get("id") or repository.DEMO_USER_ID
     try:
@@ -826,11 +821,17 @@ def submit_detach_cancel(_clicks, conflict, reason, reason_detail, user):
             reason,
             reason_detail,
         )
+
     bl_no = repository.display_bl_number(conflict)
+    zsad = conflict.get("z_sad_number") or "-"
     notice = html.Div(
         [
-            html.Strong(f"Previous BL {bl_no} cancelled."),
-            html.P("You can now save a new upload with the same BL number."),
+            html.Strong("Detach successful"),
+            html.P(
+                f"BL {bl_no} has been cancelled and Z-SAD {zsad} retired. "
+                "Any open invoices were cancelled. You can now save a new upload with the same BL number.",
+                className="section-lead",
+            ),
         ],
         className="notice success",
     )
@@ -838,9 +839,9 @@ def submit_detach_cancel(_clicks, conflict, reason, reason_detail, user):
         notice,
         _bl_table(repository.list_bls(company_id)),
         None,
-        "modal-backdrop",
-        _detach_success_body(conflict),
-        _DETACH_FORM_HIDDEN,
+        "modal-backdrop is-hidden",
+        None,
+        _DETACH_FORM_VISIBLE,
         None,
         None,
     )
