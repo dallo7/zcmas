@@ -2,8 +2,6 @@
 .venv/
 
 # Local env
-.env
-
 # Python bytecode
 __pycache__/
 *.py[cod]

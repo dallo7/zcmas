@@ -2,10 +2,6 @@
 .venv/
 */.venv/
 
-# Local env files
-.env
-*/.env
-
 # Python caches
 __pycache__/
 */__pycache__/
