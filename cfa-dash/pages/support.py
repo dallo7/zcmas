@@ -23,7 +23,7 @@ def layout(**_kwargs):
                         [
                             html.H2("Support Report"),
                             html.P(
-                                "Super Admin sees every support ticket in the system. Company users see their company tickets.",
+                                "Search support tickets by company, issue, module, priority, status, and creator. Super Admin and Admin Support see platform-wide tickets; company users see their own CFA tickets.",
                                 className="muted section-lead",
                             ),
                             dcc.Input(
@@ -76,7 +76,7 @@ def layout(**_kwargs):
 
 def _ticket_rows(user: dict | None, search: str | None = None) -> list[dict]:
     role = (user or {}).get("role")
-    company_id = None if role == "SUPER_ADMIN" else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    company_id = None if role in {"SUPER_ADMIN", "ADMIN"} else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
     return [
         {
             "created_at": (ticket.get("created_at") or "")[:19],

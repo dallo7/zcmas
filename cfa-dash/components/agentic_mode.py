@@ -86,13 +86,57 @@ def agentic_modal():
                                     html.Label("Invoice type"),
                                     dcc.Dropdown(
                                         id="agentic-invoice-type",
-                                        value="SERVICE_FEE_ONLY",
+                                        value="FULL_SETTLEMENT",
                                         options=[
-                                            {"label": "Service Fee Only", "value": "SERVICE_FEE_ONLY"},
                                             {"label": "Full Settlement", "value": "FULL_SETTLEMENT"},
                                         ],
                                         clearable=False,
                                         className="zcams-dropdown",
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    icon("lucide:landmark", 15),
+                                                    html.Div(
+                                                        [
+                                                            html.Strong("Full Settlement bank details"),
+                                                            html.P(
+                                                                "Required for all invoices. These details print on the invoice for settlement.",
+                                                                className="muted",
+                                                            ),
+                                                        ]
+                                                    ),
+                                                ],
+                                                className="agentic-bank-header",
+                                            ),
+                                            _field(
+                                                "Beneficiary / account holder",
+                                                dcc.Input(
+                                                    id="agentic-beneficiary-name",
+                                                    placeholder="e.g. ZAFFA Clearing & Forwarding Ltd",
+                                                    className="form-control",
+                                                ),
+                                            ),
+                                            _field(
+                                                "Bank name",
+                                                dcc.Input(
+                                                    id="agentic-beneficiary-bank",
+                                                    placeholder="e.g. Stanbic Bank Zambia",
+                                                    className="form-control",
+                                                ),
+                                            ),
+                                            _field(
+                                                "Account number",
+                                                dcc.Input(
+                                                    id="agentic-beneficiary-account",
+                                                    placeholder="Enter settlement account number",
+                                                    className="form-control",
+                                                ),
+                                            ),
+                                        ],
+                                        id="agentic-full-settlement-bank-panel",
+                                        className="agentic-bank-panel is-hidden",
                                     ),
                                     html.Label("Share channels"),
                                     dcc.Checklist(

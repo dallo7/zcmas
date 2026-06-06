@@ -96,13 +96,47 @@ PER_CONTAINER_CATEGORIES = {
 ADMIN_RATE = 0.20
 VAT_RATE = 0.16
 
+# GN 83 G-03 — sensitive product exemptions (Z-SAD still required; no GN 83 charge).
+EXEMPT_GN83_CATEGORIES: dict[str, str] = {
+    "FERTILIZER": "Fertiliser",
+    "PETROLEUM": "Petroleum products",
+    "SUGAR": "Sugar",
+    "IN_HOUSE_CLEARANCE": "In-house clearance",
+}
+
+
+def is_gn83_exempt(category: str | None) -> bool:
+    return (category or "") in EXEMPT_GN83_CATEGORIES
+
+
+def exempt_category_label(category: str | None) -> str:
+    return EXEMPT_GN83_CATEGORIES.get(category or "", category or "")
+
+
+def all_category_options() -> list[dict]:
+    """Dropdown options for BL capture — exempt categories first, then schedule rates."""
+    options = [
+        {"value": key, "label": f"{label} — GN 83 exempt (no charge)"}
+        for key, label in EXEMPT_GN83_CATEGORIES.items()
+    ]
+    seen = set(EXEMPT_GN83_CATEGORIES)
+    for route_modes in GN83_FEES.values():
+        for fees in route_modes.values():
+            for key, (label, amount) in fees.items():
+                if key in seen:
+                    continue
+                seen.add(key)
+                suffix = " / container" if key in PER_CONTAINER_CATEGORIES else ""
+                options.append({"value": key, "label": f"{label}{suffix} - ${amount:,.2f}"})
+    return options
+
 
 def _ceil_usd(amount: float) -> float:
     return float(math.ceil(amount - 1e-9))
 
 
 def category_options(route_type: str = "Import", transport_mode: str = "Sea") -> list[dict]:
-    fees = GN83_FEES.get(route_type, {}).get(transport_mode, {})
+    fees = GN83_FEES.get(route_type, {}).get(_transport_key(transport_mode), {})
     options = []
     for key, (label, amount) in fees.items():
         suffix = " / container" if key in PER_CONTAINER_CATEGORIES else ""
@@ -111,12 +145,42 @@ def category_options(route_type: str = "Import", transport_mode: str = "Sea") ->
 
 
 def fee_label(route_type: str, transport_mode: str, category: str) -> str:
-    return GN83_FEES.get(route_type, {}).get(transport_mode, {}).get(category, (category, 0))[0]
+    if is_gn83_exempt(category):
+        return exempt_category_label(category)
+    return GN83_FEES.get(route_type, {}).get(_transport_key(transport_mode), {}).get(category, (category, 0))[0]
 
 
 def unit_fee(route_type: str, transport_mode: str, category: str) -> float:
-    _label, amount = GN83_FEES.get(route_type, {}).get(transport_mode, {}).get(category, (category, 0.0))
+    if is_gn83_exempt(category):
+        return 0.0
+    _label, amount = GN83_FEES.get(route_type, {}).get(_transport_key(transport_mode), {}).get(category, (category, 0.0))
     return round(float(amount), 2)
+
+
+def unit_label(category: str | None) -> str:
+    return {
+        "20FT_CONTAINER": "Container",
+        "40FT_CONTAINER": "Container",
+        "DRY_BULK": "MT",
+        "BULK_LIQUID": "MT",
+        "MOTOR_VEHICLE": "Unit",
+        "HEAVY_EQUIPMENT": "Unit",
+        "LIVE_ANIMAL": "BL",
+        "LOOSE_LCL": "BL",
+        "POST_ENTRY": "BL",
+        "COASTWISE": "Transire",
+        "PARCEL": "AWB",
+        "GENERAL_CARGO": "AWB",
+        "PRECIOUS_MINERALS": "AWB",
+        "FERTILIZER": "Exempt",
+        "PETROLEUM": "Exempt",
+        "SUGAR": "Exempt",
+        "IN_HOUSE_CLEARANCE": "Exempt",
+    }.get(category or "", "Unit")
+
+
+def _transport_key(transport_mode: str | None) -> str:
+    return "Road" if transport_mode == "Rail" else (transport_mode or "Sea")
 
 
 def billable_units(
@@ -144,6 +208,8 @@ def lookup_fee(
     no_containers: int | float | None = None,
     gross_weight: float | None = None,
 ) -> float:
+    if is_gn83_exempt(category):
+        return 0.0
     amount = unit_fee(route_type, transport_mode, category)
     units = billable_units(
         category,
@@ -176,13 +242,15 @@ def gn83_quote_for_reviewed(reviewed: dict) -> dict[str, Any]:
         no_containers=reviewed.get("no_containers"),
         gross_weight=cargo.get("weight") or reviewed.get("gross_weight"),
     )
+    exempt = is_gn83_exempt(category)
     return {
         "category": category,
         "category_label": fee_label(route_type, transport_mode, category),
         "units": units,
         "unit_rate": rate,
-        "std_min_fee": std_min,
+        "std_min_fee": 0.0 if exempt else std_min,
         "per_container": category in PER_CONTAINER_CATEGORIES,
+        "exempt": exempt,
     }
 
 
@@ -190,22 +258,13 @@ def calculate_invoice(std_min_fee: float, invoice_type: str) -> dict[str, float]
     """
     GN 83 invoice amounts (USD).
 
-    Admin fee is 20% of the standard minimum. VAT is 16% (Zambia) on:
-    - Service Fee Only: admin fee only → e.g. 150 × 20% = 30, VAT 4.80, total 35.
-    - Full Settlement: standard minimum + admin → e.g. 180 × 16% = 28.80, total 209.
+    Full Settlement uses the standard minimum plus 20% admin fee.
+    VAT is 16% (Zambia) on the combined subtotal.
 
     Invoice total is rounded up to the next whole dollar.
     """
     std = round(float(std_min_fee or 0), 2)
     admin = round(std * ADMIN_RATE, 2)
-    if invoice_type == "SERVICE_FEE_ONLY":
-        vat = round(admin * VAT_RATE, 2)
-        return {
-            "std_min_fee": std,
-            "admin_fee": admin,
-            "vat": vat,
-            "total": _ceil_usd(admin + vat),
-        }
     subtotal = round(std + admin, 2)
     vat = round(subtotal * VAT_RATE, 2)
     return {

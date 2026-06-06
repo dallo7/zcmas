@@ -19,7 +19,7 @@ def _cleanup_company(company_id: str) -> None:
         conn.commit()
 
 
-@patch("services.repository.send_email")
+@patch("services.repository.send_new_user_registration_email")
 def test_approve_company_sends_credentials(mock_send):
     bootstrap()
     mock_send.return_value = {"sent": True, "mode": "bird"}

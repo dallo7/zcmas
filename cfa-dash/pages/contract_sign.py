@@ -37,6 +37,10 @@ def layout(**_kwargs):
                             html.Div(
                                 [
                                     html.H2("Contract To Review"),
+                                    html.P(
+                                        "Read the contract details, shipment scope, services, fees, and terms before signing.",
+                                        className="muted section-lead",
+                                    ),
                                     html.Div(id="sign-contract-summary"),
                                 ],
                                 className="card section-card stack",
@@ -44,6 +48,10 @@ def layout(**_kwargs):
                             html.Div(
                                 [
                                     html.H2("Verify & Sign"),
+                                    html.P(
+                                        "Enter the registered email, contract ID, OTP, and signature confirmation to complete the secure signing step.",
+                                        className="muted section-lead",
+                                    ),
                                     html.Div(
                                         [
                                             dcc.Input(
@@ -139,6 +147,7 @@ def _contract_summary(contract: dict | None):
                 className="detail-grid",
             ),
             html.H3("Shipment Details"),
+            html.P("Shipment route, BL reference, cargo, origin, destination, and clearance scope attached to this agreement.", className="muted section-label-copy"),
             html.Div(
                 [
                     detail_item("Shipment Route", shipment.get("shipment_route")),
@@ -151,9 +160,11 @@ def _contract_summary(contract: dict | None):
                 className="detail-grid",
             ),
             html.H3("Services & Fees"),
+            html.P("Services to be performed and the fees or payment terms accepted by the signer.", className="muted section-label-copy"),
             html.P(contract.get("services") or "No service details supplied.", className="contract-text-block"),
             html.P(contract.get("fees") or "No fee details supplied.", className="contract-text-block"),
             html.H3("Attached Terms of Contract"),
+            html.P("Legal terms that become part of the signed contract fingerprint.", className="muted section-label-copy"),
             html.Div(contract.get("terms") or repository.default_contract_terms(), className="contract-terms-scroll"),
             html.Div(
                 "After signing, ZCAMS stores a SHA-256 fingerprint of the complete signed contract data. "

@@ -38,8 +38,7 @@ APP_KNOWLEDGE = [
     (
         "Invoices",
         "Invoices use GN 83 minimum fees. Full Settlement charges the standard minimum plus 20 percent "
-        "admin fee and 16 percent VAT on the subtotal. Service Fee Only bills the 20 percent admin fee "
-        "plus 16 percent VAT on that admin fee.",
+        "admin fee and 16 percent VAT on the subtotal.",
     ),
     (
         "Check-out",
@@ -150,9 +149,8 @@ FAQ_FALLBACKS = [
         "for at least five years.",
     ),
     (
-        ("invoice", "vat", "service fee"),
-        "Full Settlement uses standard minimum + 20% admin fee + 16% VAT on that subtotal. "
-        "Service Fee Only bills 20% of the standard minimum plus 16% VAT on the admin fee.",
+        ("invoice", "vat", "settlement"),
+        "Full Settlement uses standard minimum + 20% admin fee + 16% VAT on that subtotal.",
     ),
     (
         ("payment", "check-out", "checkout", "capitalpay"),

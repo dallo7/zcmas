@@ -56,11 +56,9 @@ def test_capitalpay_sign_uses_cpays_format():
     assert signed["capitalpay_number"] == signed["urn"]
 
 
-def test_invoice_amounts_for_both_settlement_modes():
+def test_invoice_amounts_for_full_settlement():
     std = lookup_fee("Import", "Sea", "MOTOR_VEHICLE")
-    service = calculate_invoice(std, "SERVICE_FEE_ONLY")
     full = calculate_invoice(std, "FULL_SETTLEMENT")
-    assert service["total"] == 31.0
     assert full["total"] == 181.0
 
 
@@ -72,7 +70,7 @@ def test_generate_and_share_invoice_links(mock_send_email):
     reviewed = _reviewed_target()
     invoice = generate_invoice(
         reviewed["id"],
-        "SERVICE_FEE_ONLY",
+        "FULL_SETTLEMENT",
         contact_phone="0971234567",
         contact_email="importer@example.com",
     )
@@ -105,7 +103,7 @@ def test_checkout_ref_update_controls_invoice_display_and_pdf():
     reviewed = _reviewed_target()
     invoice = generate_invoice(
         reviewed["id"],
-        "SERVICE_FEE_ONLY",
+        "FULL_SETTLEMENT",
         contact_phone="0971234567",
         contact_email="importer@example.com",
     )

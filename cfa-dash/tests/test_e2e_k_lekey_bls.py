@@ -36,10 +36,10 @@ K_LEKEY_DIR = Path(
 CLIENT_EMAIL = os.getenv("ZCAMS_E2E_EMAIL", "cwakhusama@gmail.com")
 CLIENT_PHONE = os.getenv("ZCAMS_E2E_PHONE", "0977123456")
 
-# 2 × Service Fee Only, 3 × Full Settlement
+# 2 × Full Settlement, 3 × Full Settlement
 BL_CASES = [
-    ("BL1_1Container_MSC_MSC4051473322.pdf", "SERVICE_FEE_ONLY"),
-    ("BL2_2Containers_MAERSK_MAEU5461108570.pdf", "SERVICE_FEE_ONLY"),
+    ("BL1_1Container_MSC_MSC4051473322.pdf", "FULL_SETTLEMENT"),
+    ("BL2_2Containers_MAERSK_MAEU5461108570.pdf", "FULL_SETTLEMENT"),
     ("BL3_3Containers_1Loose_CMA CGM_CMAU2023754313.pdf", "FULL_SETTLEMENT"),
     ("BL4_10Containers_HAPAG-LLOYD_HLCU1443330589.pdf", "FULL_SETTLEMENT"),
     ("BL5_4LCL_1Container_EVERGREEN_EITU7260197003.pdf", "FULL_SETTLEMENT"),

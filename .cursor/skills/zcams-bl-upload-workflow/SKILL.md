@@ -25,7 +25,7 @@ Treat OCR as a draft assistant. Never assume OCR is final. The agent must compar
 7. Agent saves the BL.
 8. Agent moves to invoice/Z-SAD handling, either through the post-save `Request invoice` step or `Reviewed BL`.
 9. ZCAMS issues a Z-SAD after review.
-10. Agent generates a service-fee or full-settlement invoice.
+10. Agent generates a agency-charge or full-settlement invoice.
 11. Agent shares the invoice with the importer by WhatsApp link or email, including PDF download/payment information.
 
 ## OCR Decision Memory
@@ -64,7 +64,7 @@ Before saving the BL, generating the invoice, or sending the email/WhatsApp link
 2. `Consignee/Consigner TIN` - confirm the tax identifier used for the importer/customer record is correct.
 3. `Gross Weight (MT)` - this supports cargo validation and may affect GN 83 interpretation for bulk or loose cargo.
 4. `No. of containers / loose cargo / LCL` - confirm whether the shipment is full-container cargo or loose/consolidated/LCL cargo before applying GN 83.
-5. `Service Fee Only / Full Settlement` - confirm the invoice type before generating and sending the invoice.
+5. `Full Settlement` - confirm the invoice type before generating and sending the invoice.
 
 If any of these five values are uncertain, stop and ask the user to re-check the BL before continuing. Do not send the mail/WhatsApp link until these five values are confirmed.
 
@@ -89,8 +89,7 @@ Category decision:
 
 Invoice calculation memory:
 
-- `SERVICE_FEE_ONLY`: admin fee = 20% of standard minimum; VAT = 16% of admin fee; total is ceiled.
-- `FULL_SETTLEMENT`: subtotal = standard minimum + admin fee; VAT = 16% of subtotal; total is ceiled.
+- - `FULL_SETTLEMENT`: subtotal = standard minimum + admin fee; VAT = 16% of subtotal; total is ceiled.
 
 ## Episodic Test Memory
 
@@ -115,7 +114,7 @@ Observed and expected:
 - Cargo contains: `LONG GRAIN WHITE RICE`
 - GN 83 category: `20FT_CONTAINER`
 - Standard minimum: `USD 150`
-- Service Fee Only total: `USD 35`
+- Full Settlement total: `USD 35`
 - Full Settlement total: `USD 209`
 - WhatsApp share link starts with `https://wa.me/`
 - Email fallback link starts with `mailto:` when live email is not being tested
@@ -140,7 +139,7 @@ Observed and expected:
 - Cargo contains: `LONG GRAIN WHITE RICE`
 - GN 83 category: `20FT_CONTAINER`
 - Standard minimum: `USD 1,500`
-- Service Fee Only total: `USD 348`
+- Full Settlement total: `USD 348`
 - Full Settlement total: `USD 2,088`
 - WhatsApp link starts with `https://wa.me/`
 - Email link starts with `mailto:` when live email is not configured
@@ -158,7 +157,7 @@ Expected memory:
 - GN 83 category must be `LOOSE_LCL`.
 - Standard minimum must not multiply by container count.
 - Import + Sea loose/LCL standard minimum is `USD 90`.
-- Service Fee Only total for USD 90 standard minimum is `USD 21`.
+- Full Settlement total for USD 90 standard minimum is `USD 21`.
 - Full Settlement total for USD 90 standard minimum is `USD 126`.
 
 ### Episode 4: End-to-end share path

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm, mm
@@ -47,13 +49,21 @@ def _capitalpay_checkout(invoice: dict) -> float | None:
     return None
 
 
+def _zcams_checkout_link(invoice: dict) -> str | None:
+    invoice_id = invoice.get("id")
+    if not invoice_id:
+        return None
+    base = (os.getenv("PUBLIC_APP_URL") or "http://127.0.0.1:8050").strip().rstrip("/")
+    return f"{base}/capitalpay/checkout/{invoice_id}"
+
+
 INVOICE_PDF_DIR = DATA_DIR / "invoices"
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 INVOICE_LOGO_PATH = ASSETS_DIR / "zcams-logo.png"
 CAPITALPAY_LOGO_PATH = ASSETS_DIR / "capitalPay.png"
 
-# Five major retail banks in Zambia — logo PNGs in assets/ (display order).
-ZAMBIA_BANK_LOGOS: list[Path] = [
+# Authorised collection banks — logo PNGs in assets/.
+AUTHORISED_COLLECTION_BANK_LOGOS: list[Path] = [
     ASSETS_DIR / "Zanaco.png",
     ASSETS_DIR / "Stanbic.png",
     ASSETS_DIR / "FNB Bank.png",
@@ -390,6 +400,86 @@ def _scaled_image(path: Path, max_width: float, max_height: float) -> Image:
     return img
 
 
+def _bank_logo_card(
+    path: Path,
+    *,
+    rule: Any,
+    bank_bg: Any,
+    max_logo_w: float,
+    max_logo_h: float,
+) -> Table:
+    card = Table([[_bank_logo_cell(path, max_logo_w, max_logo_h)]], colWidths=[None])
+    card.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), bank_bg),
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ]
+        )
+    )
+    return card
+
+
+def _authorised_collection_banks_section(
+    page_w: float,
+    *,
+    section_label_style: ParagraphStyle,
+    rule: Any,
+    bank_bg: Any,
+) -> Table:
+    col_w = (page_w - 52) / len(AUTHORISED_COLLECTION_BANK_LOGOS)
+    logo_max_w = max(col_w - 14, 1.8 * cm)
+    logo_max_h = 12 * mm
+    cards = [
+        _bank_logo_card(
+            path,
+            rule=rule,
+            bank_bg=bank_bg,
+            max_logo_w=logo_max_w,
+            max_logo_h=logo_max_h,
+        )
+        for path in AUTHORISED_COLLECTION_BANK_LOGOS
+    ]
+    banks_grid = Table([cards], colWidths=[col_w] * len(cards))
+    banks_grid.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    section = Table(
+        [
+            [Paragraph("AUTHORISED COLLECTION BANKS", section_label_style)],
+            [banks_grid],
+        ],
+        colWidths=[page_w],
+    )
+    section.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+                ("LEFTPADDING", (0, 0), (-1, -1), 26),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 26),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+            ]
+        )
+    )
+    return section
+
+
 def _bank_logo_cell(path: Path, max_width: float, max_height: float) -> Image | Paragraph:
     if path.is_file():
         return _scaled_image(path, max_width, max_height)
@@ -405,22 +495,25 @@ def _bank_logo_cell(path: Path, max_width: float, max_height: float) -> Image | 
 
 def _bank_logo_table() -> Table:
     cell_w = 3.3 * cm
-    max_logo_w = 2.9 * cm
-    max_logo_h = 1.1 * cm
-    cells = [_bank_logo_cell(path, max_logo_w, max_logo_h) for path in ZAMBIA_BANK_LOGOS]
-    row = Table([cells], colWidths=[cell_w] * len(cells))
+    cards = [
+        _bank_logo_card(
+            path,
+            rule=COLOR_BANK_BORDER,
+            bank_bg=COLOR_BANK_BG,
+            max_logo_w=2.9 * cm,
+            max_logo_h=1.1 * cm,
+        )
+        for path in AUTHORISED_COLLECTION_BANK_LOGOS
+    ]
+    row = Table([cards], colWidths=[cell_w] * len(cards))
     row.setStyle(
         TableStyle(
             [
-                ("BOX", (0, 0), (-1, -1), 1.25, COLOR_BANK_BORDER),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, COLOR_GRID_LINE),
-                ("BACKGROUND", (0, 0), (-1, -1), COLOR_BANK_BG),
-                ("TOPPADDING", (0, 0), (-1, -1), 10),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
             ]
         )
     )
@@ -546,35 +639,25 @@ def _payment_reference(invoice: dict) -> str:
 
 
 def _collection_banks_table(styles: dict) -> Table:
-    banks = [
-        ("Z", "Zanaco", "Cairo Road Branch", "SWIFT: ZNCOZMLU"),
-        ("ABSA", "ABSA", "Cairo Road Branch", "SWIFT: BARCZMLU"),
-        ("S", "Stanbic", "Lusaka Main Branch", "SWIFT: SBICZMLX"),
-        ("E", "Ecobank", "Cairo Road Branch", "SWIFT: ECOCZMLU"),
-        ("SC", "Stanchart", "Cairo Road Branch", "SWIFT: SCBLZMLU"),
-    ]
-    cells = []
-    for code, name, branch, swift in banks:
-        cells.append(
-            [
-                Paragraph(code, styles["bank_name"]),
-                Paragraph(name, styles["bank_name"]),
-                Paragraph(branch, styles["bank_detail"]),
-                Paragraph(swift, styles["bank_detail"]),
-            ]
+    cards = [
+        _bank_logo_card(
+            path,
+            rule=COLOR_BANK_BORDER,
+            bank_bg=COLOR_BANK_BG,
+            max_logo_w=2.8 * cm,
+            max_logo_h=1.1 * cm,
         )
-    table = Table([cells], colWidths=[3.25 * cm] * len(cells))
+        for path in AUTHORISED_COLLECTION_BANK_LOGOS
+    ]
+    table = Table([cards], colWidths=[3.25 * cm] * len(cards))
     table.setStyle(
         TableStyle(
             [
-                ("BOX", (0, 0), (-1, -1), 1, COLOR_ZCAMS_GREEN),
-                ("INNERGRID", (0, 0), (-1, -1), 0.4, COLOR_GRID_LINE),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FBF6")),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
             ]
         )
     )
@@ -613,191 +696,487 @@ def generate_invoice_pdf(invoice: dict, company: dict) -> Path:
     settlement = (invoice.get("invoice_type") or "").replace("_", " ").title()
     capitalpay_no = _payment_reference(invoice)
     amount_due = _gn83_total(invoice)
-    checkout = _capitalpay_checkout(invoice)
+    payment_link = _zcams_checkout_link(invoice)
     issued = invoice.get("signed_at") or invoice.get("created_at") or datetime.now(timezone.utc).isoformat()
     try:
         issued_display = datetime.fromisoformat(issued.replace("Z", "+00:00")).strftime("%d %b %Y %H:%M UTC")
+        due_display = datetime.fromisoformat(issued.replace("Z", "+00:00")).strftime("%d %b %Y")
     except ValueError:
         issued_display = str(issued)[:19]
+        due_display = invoice.get("due_date") or "On presentation"
+
+    def safe(value: Any, fallback: str = "—") -> str:
+        text = str(value if value not in (None, "") else fallback)
+        return escape(text)
+
+    def field(label: str, value: Any, *, mono: bool = False) -> list[Any]:
+        value_style = ParagraphStyle(
+            f"TemplateValue{'Mono' if mono else ''}",
+            parent=styles["value"],
+            fontName="Courier-Bold" if mono else "Helvetica-Bold",
+            fontSize=8.8 if mono else 9.6,
+            leading=11.5,
+            textColor=colors.HexColor("#111110"),
+            spaceAfter=0,
+        )
+        return [
+            Paragraph(safe(label).upper(), template_styles["field_label"]),
+            Paragraph(safe(value), value_style),
+        ]
+
+    template_styles = {
+        "header_org": ParagraphStyle(
+            "TemplateHeaderOrg",
+            parent=styles["footer"],
+            fontSize=6.6,
+            leading=8,
+            textColor=colors.HexColor("#AAA89F"),
+            fontName="Helvetica-Bold",
+            alignment=TA_LEFT,
+        ),
+        "header_brand": ParagraphStyle(
+            "TemplateHeaderBrand",
+            parent=styles["title"],
+            fontSize=15,
+            leading=18,
+            textColor=colors.white,
+            fontName="Helvetica-Bold",
+            alignment=TA_LEFT,
+        ),
+        "header_title": ParagraphStyle(
+            "TemplateHeaderTitle",
+            parent=styles["title"],
+            fontSize=19,
+            leading=22,
+            textColor=colors.white,
+            fontName="Helvetica-Bold",
+            alignment=TA_LEFT,
+        ),
+        "header_muted": ParagraphStyle(
+            "TemplateHeaderMuted",
+            parent=styles["footer"],
+            fontSize=8.5,
+            leading=11,
+            textColor=colors.HexColor("#AAA89F"),
+            alignment=TA_RIGHT,
+        ),
+        "doc_num": ParagraphStyle(
+            "TemplateDocNum",
+            parent=styles["value"],
+            fontSize=15.5,
+            leading=19,
+            textColor=colors.white,
+            fontName="Courier-Bold",
+            alignment=TA_RIGHT,
+        ),
+        "pill_label": ParagraphStyle(
+            "TemplatePillLabel",
+            parent=styles["label"],
+            fontSize=6.6,
+            leading=8,
+            textColor=colors.HexColor("#7A7870"),
+            fontName="Helvetica-Bold",
+        ),
+        "pill_value": ParagraphStyle(
+            "TemplatePillValue",
+            parent=styles["value"],
+            fontSize=9.2,
+            leading=11,
+            textColor=colors.HexColor("#111110"),
+            fontName="Courier-Bold",
+        ),
+        "section_title": ParagraphStyle(
+            "TemplateSectionTitle",
+            parent=styles["label"],
+            fontSize=8.5,
+            leading=10,
+            textColor=colors.HexColor("#111110"),
+            fontName="Helvetica-Bold",
+        ),
+        "field_label": ParagraphStyle(
+            "TemplateFieldLabel",
+            parent=styles["label"],
+            fontSize=6.4,
+            leading=8,
+            textColor=colors.HexColor("#7A7870"),
+            fontName="Helvetica-Bold",
+        ),
+        "amount_label": ParagraphStyle(
+            "TemplateAmountLabel",
+            parent=styles["label"],
+            fontSize=7.4,
+            leading=9,
+            textColor=colors.HexColor("#AAA89F"),
+            fontName="Helvetica-Bold",
+        ),
+        "amount_value": ParagraphStyle(
+            "TemplateAmountValue",
+            parent=styles["title"],
+            fontSize=27,
+            leading=31,
+            textColor=colors.white,
+            fontName="Helvetica-Bold",
+        ),
+        "body": ParagraphStyle(
+            "TemplateBody",
+            parent=styles["instruction"],
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#3A3935"),
+        ),
+        "instruction_title": ParagraphStyle(
+            "TemplateInstructionTitle",
+            parent=styles["label"],
+            fontSize=8.5,
+            leading=10,
+            textColor=COLOR_ZCAMS_GREEN,
+            fontName="Helvetica-Bold",
+            alignment=TA_LEFT,
+        ),
+        "instruction_body": ParagraphStyle(
+            "TemplateInstructionBody",
+            parent=styles["instruction"],
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#3A3935"),
+            alignment=TA_LEFT,
+        ),
+        "body_small": ParagraphStyle(
+            "TemplateBodySmall",
+            parent=styles["instruction"],
+            fontSize=8.4,
+            leading=12,
+            textColor=colors.HexColor("#3A3935"),
+        ),
+        "bank_name": ParagraphStyle(
+            "TemplateBankName",
+            parent=styles["bank_name"],
+            fontSize=8.4,
+            leading=10,
+            textColor=colors.HexColor("#111110"),
+        ),
+        "bank_detail": ParagraphStyle(
+            "TemplateBankDetail",
+            parent=styles["bank_detail"],
+            fontSize=6.7,
+            leading=8,
+            textColor=colors.HexColor("#7A7870"),
+            alignment=0,
+        ),
+        "footer_title": ParagraphStyle(
+            "TemplateFooterTitle",
+            parent=styles["value"],
+            fontSize=9.4,
+            leading=12,
+            textColor=colors.HexColor("#111110"),
+            fontName="Helvetica-Bold",
+            spaceAfter=2,
+        ),
+        "footer_body": ParagraphStyle(
+            "TemplateFooterBody",
+            parent=styles["footer"],
+            fontSize=7.7,
+            leading=11,
+            textColor=colors.HexColor("#3A3935"),
+            alignment=0,
+        ),
+        "footer_meta": ParagraphStyle(
+            "TemplateFooterMeta",
+            parent=styles["footer"],
+            fontSize=6.9,
+            leading=9,
+            textColor=colors.HexColor("#7A7870"),
+            alignment=0,
+            fontName="Courier",
+        ),
+        "stamp": ParagraphStyle(
+            "TemplateStamp",
+            parent=styles["footer"],
+            fontSize=6.2,
+            leading=8,
+            textColor=colors.HexColor("#A0A09A"),
+            fontName="Helvetica-Bold",
+            alignment=TA_CENTER,
+        ),
+    }
 
     doc = SimpleDocTemplate(
         str(path),
         pagesize=A4,
-        leftMargin=1.5 * cm,
-        rightMargin=1.5 * cm,
-        topMargin=1.2 * cm,
-        bottomMargin=1.2 * cm,
+        leftMargin=0.85 * cm,
+        rightMargin=0.85 * cm,
+        topMargin=0.75 * cm,
+        bottomMargin=0.75 * cm,
         title=f"ZCAMS Invoice {invoice.get('invoice_number')}",
         author=company.get("name", "ZCAMS"),
     )
 
-    story: list[Any] = []
+    page_w = A4[0] - doc.leftMargin - doc.rightMargin
+    accent = colors.HexColor("#1A1A18")
+    rule = colors.HexColor("#D6D3CC")
+    bank_bg = colors.HexColor("#F0EDE8")
+    gold_bg = colors.HexColor("#FDF6E3")
+    footer_bg = colors.HexColor("#FAFAF8")
 
-    logo = _invoice_logo_image()
-    if logo:
-        story.append(_centered_block([logo]))
-        story.append(Spacer(1, 5 * mm))
-
-    story.append(
-        _centered_block(
-            [
-                Paragraph("CapitalPay Signed Invoice", styles["cpay_label"]),
-                Spacer(1, 4 * mm),
-            ]
+    if INVOICE_LOGO_PATH.is_file():
+        logo_mark = _scaled_image(INVOICE_LOGO_PATH, 14 * mm, 14 * mm)
+    else:
+        logo_mark = Table(
+            [[Paragraph("ZC", ParagraphStyle("LogoTop", fontSize=11, leading=12, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=accent))],
+             [Paragraph("AMS", ParagraphStyle("LogoBot", fontSize=5, leading=6, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=accent))]],
+            colWidths=[12 * mm],
+            rowHeights=[6.5 * mm, 4.5 * mm],
         )
-    )
-    story.append(_cpay_ref_banner(capitalpay_no, styles))
-    story.append(Spacer(1, 4 * mm))
-    story.append(
-        _centered_block(
-            [
-                Paragraph(f"{company.get('name', 'Clearing & Forwarding Agent')}", styles["center_sub"]),
-                Paragraph("GN 83 Compliant Customs Agency Invoice", styles["center_sub"]),
-            ]
-        )
-    )
-    story.append(Spacer(1, 8 * mm))
-
-    story.append(_section_header("Partner banking network — Zambia", styles))
-    story.append(Spacer(1, 1.5 * mm))
-    story.append(_bank_logo_table())
-    story.append(Spacer(1, 8 * mm))
-
-    story.append(
-        _boxed_section(
-            [
-                _section_header("Invoice details", styles, color=COLOR_ZCAMS_GREEN_DARK, width=15.8 * cm),
-                Spacer(1, 2 * mm),
-                _detail_grid(
-                    [
-                        ("ZCAMS invoice no.", invoice.get("invoice_number")),
-                        ("CapitalPay invoice no.", capitalpay_no),
-                        ("Settlement type", settlement),
-                        ("Invoice status", invoice.get("status", "AWAITING_PAYMENT")),
-                        ("Date issued", issued_display),
-                        ("Due date", invoice.get("due_date") or "—"),
-                    ],
-                    styles,
-                    highlight_label="CapitalPay invoice no.",
-                ),
-            ],
-            border=COLOR_ZCAMS_GREEN,
-            background=COLOR_PANEL_BG,
-        )
-    )
-    story.append(Spacer(1, 6 * mm))
-
-    story.append(
-        _boxed_section(
-            [
-                _section_header("Shipment & Z-SAD reference", styles, color=COLOR_ZCAMS_GREEN, width=15.8 * cm),
-                Spacer(1, 2 * mm),
-                _detail_grid(
-                    [
-                        ("Bill of Lading", invoice.get("bl_number")),
-                        ("Z-SAD number", invoice.get("z_sad_number")),
-                        ("Consignee", invoice.get("consignee_name")),
-                        ("Consignee TPIN", invoice.get("consignee_tin")),
-                    ],
-                    styles,
-                    highlight_label="Z-SAD number",
-                ),
-            ],
-            border=COLOR_ZCAMS_GREEN,
-            background=COLOR_PANEL_BG,
-        )
-    )
-    story.append(Spacer(1, 6 * mm))
-
-    story.append(
-        _boxed_section(
-            [
-                _section_header("Importer contact", styles, color=COLOR_IMPORTER_GREEN, width=15.8 * cm),
-                Spacer(1, 2 * mm),
-                Paragraph("Importer contact", styles["section_importer"]),
-                _detail_grid(
-                    [
-                        ("Contact phone", invoice.get("contact_phone")),
-                        ("Contact email", invoice.get("contact_email")),
-                    ],
-                    styles,
-                ),
-            ],
-            border=COLOR_IMPORTER_GREEN,
-            background=COLOR_IMPORTER_BG,
-        )
-    )
-
-    if invoice.get("invoice_type") == "FULL_SETTLEMENT":
-        story.append(Spacer(1, 6 * mm))
-        story.append(Paragraph("Beneficiary settlement details", styles["label"]))
-        story.append(Spacer(1, 2 * mm))
-        story.append(
-            _detail_grid(
+        logo_mark.setStyle(
+            TableStyle(
                 [
-                    ("Beneficiary name", invoice.get("beneficiary_name")),
-                    ("Bank name", invoice.get("beneficiary_bank_name")),
-                    ("Account number", invoice.get("beneficiary_account_number")),
-                ],
-                styles,
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#D9B650")),
+                    ("BOX", (0, 0), (-1, -1), 0, colors.HexColor("#D9B650")),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
             )
         )
-
-    story.append(Spacer(1, 10 * mm))
-    amount_rows: list[list[Any]] = [
-        [Paragraph("Amount due (USD)", styles["label_on_green"]), Paragraph(f"USD {amount_due:,.2f}", styles["total_on_green"])],
+    logo_text = [
+        Paragraph("ZAMBIA CLEARING AGENCY MANAGEMENT SYSTEM", template_styles["header_org"]),
+        Paragraph("ZCAMS", template_styles["header_brand"]),
     ]
-    if checkout is not None:
-        amount_rows.append(
-            [
-                Paragraph("CapitalPay checkout (USD)", styles["label_on_green"]),
-                Paragraph(f"USD {checkout:,.2f}", styles["total_on_green"]),
-            ]
-        )
-    total_box = Table(amount_rows, colWidths=[10 * cm, 6.3 * cm])
-    total_box.setStyle(
+    header_left = [
+        Table([[logo_mark, logo_text]], colWidths=[14 * mm, 82 * mm], style=[
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ]),
+        Spacer(1, 5 * mm),
+        Paragraph("Auto-Generated Invoice", template_styles["header_title"]),
+    ]
+    header_right = [
+        Paragraph("BANK INVOICE REF", template_styles["header_muted"]),
+        Paragraph(safe(capitalpay_no), template_styles["doc_num"]),
+        Spacer(1, 2 * mm),
+        Paragraph(f"Settlement due: <b>{safe(due_display)}</b>", template_styles["header_muted"]),
+    ]
+    header = Table([[header_left, header_right]], colWidths=[page_w * 0.62, page_w * 0.38])
+    header.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, -1), COLOR_ZCAMS_GREEN),
-                ("BOX", (0, 0), (-1, -1), 1.2, COLOR_ZCAMS_GREEN_DARK),
-                ("TOPPADDING", (0, 0), (-1, -1), 12),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-                ("LEFTPADDING", (0, 0), (-1, -1), 12),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-                ("LINEBEFORE", (0, 0), (0, -1), 5, COLOR_ZCAMS_GREEN_DARK),
+                ("BACKGROUND", (0, 0), (-1, -1), accent),
+                ("LEFTPADDING", (0, 0), (0, 0), 26),
+                ("RIGHTPADDING", (0, 0), (0, 0), 12),
+                ("LEFTPADDING", (1, 0), (1, 0), 12),
+                ("RIGHTPADDING", (1, 0), (1, 0), 26),
+                ("TOPPADDING", (0, 0), (-1, -1), 22),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 22),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
             ]
         )
     )
-    story.append(total_box)
-    story.append(Spacer(1, 6 * mm))
 
-    if invoice.get("secure_link") or invoice.get("checkout_url"):
-        story.append(
-            _boxed_section(
+    def pill(code: str, label: str, value: Any, bg: str, fg: str) -> list[Any]:
+        icon_style = ParagraphStyle("PillIcon", fontSize=7.2, leading=9, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor(fg))
+        icon = Table([[Paragraph(code, icon_style)]], colWidths=[9.5 * mm], rowHeights=[9.5 * mm])
+        icon.setStyle(
+            TableStyle(
                 [
-                    Paragraph(
-                        f"<b>Payment reference:</b> {capitalpay_no}<br/>"
-                        f"<b>Secure payment link:</b> {invoice.get('secure_link') or invoice.get('checkout_url')}",
-                        styles["subtitle"],
-                    )
-                ],
-                border=COLOR_CPAY_BLUE,
-                background=COLOR_CPAY_BG,
+                    ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(bg)),
+                    ("BOX", (0, 0), (-1, -1), 1, colors.HexColor(fg)),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ]
             )
         )
+        text = [Paragraph(safe(label).upper(), template_styles["pill_label"]), Paragraph(safe(value), template_styles["pill_value"])]
+        return [icon, text]
 
-    story.append(Spacer(1, 12 * mm))
-    story.append(
-        Paragraph(
-            f"{company.get('name', 'ZCAMS')} · {company.get('address_line1', '')} {company.get('city', '')} · "
-            f"Tel {company.get('phone', '—')} · {company.get('company_email', '—')}<br/>"
-            "This invoice is digitally signed through CapitalPay. Present the CapitalPay invoice number when paying.",
-            styles["footer"],
+    pill_row = Table(
+        [
+            [
+                Table([pill("ZSD", "Z-SAD Number", invoice.get("z_sad_number"), "#FFF3CD", "#8A6200")], colWidths=[12 * mm, 49 * mm]),
+                Table([pill("INV", "Invoice Number", invoice.get("invoice_number"), "#E8F0FE", "#1A47A8")], colWidths=[12 * mm, 55 * mm]),
+                Table([pill("CPY", "CapitalPay No (Bank Invoice Ref)", capitalpay_no, "#E6F4EA", "#1A6E35")], colWidths=[12 * mm, 52 * mm]),
+            ]
+        ],
+        colWidths=[page_w * 0.32, page_w * 0.34, page_w * 0.34],
+    )
+    pill_row.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.75, rule),
+                ("TOPPADDING", (0, 0), (-1, -1), 14),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+                ("LEFTPADDING", (0, 0), (-1, -1), 26),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
         )
     )
 
-    draw_footer_logo = _footer_company_logo(company)
-    doc.build(story, onFirstPage=draw_footer_logo, onLaterPages=draw_footer_logo)
+    company_name = company.get("name") or invoice.get("company_name") or "ZCAMS Customer"
+    company_tpin = company.get("tpin") or invoice.get("consignee_tin") or "—"
+    company_email = company.get("company_email") or invoice.get("contact_email") or "—"
+    cargo_category = (invoice.get("gn83_category") or settlement or "—").replace("_", " ").title()
+    shipment_reference = invoice.get("bl_number") or invoice.get("reviewed_bl_id") or "—"
+    if invoice.get("cargo_description"):
+        cargo_category = f"{cargo_category}, {invoice.get('cargo_description')}"
+
+    left_body = [
+        Paragraph("INVOICE TO", template_styles["section_title"]),
+        Spacer(1, 4 * mm),
+        *field("Company", company_name),
+        Spacer(1, 2 * mm),
+        *field("TIN / Tax ID", company_tpin, mono=True),
+        Spacer(1, 2 * mm),
+        *field("Email", company_email),
+    ]
+    right_body = [
+        Paragraph("Z-SAD REFERENCE", template_styles["section_title"]),
+        Spacer(1, 4 * mm),
+        *field("Z-SAD Number", invoice.get("z_sad_number"), mono=True),
+        Spacer(1, 2 * mm),
+        *field("Shipment Reference", shipment_reference, mono=True),
+        Spacer(1, 2 * mm),
+        *field("Cargo Category", cargo_category),
+    ]
+    body_grid = Table([[left_body, right_body]], colWidths=[page_w / 2, page_w / 2])
+    body_grid.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("LINEBEFORE", (1, 0), (1, 0), 0.75, rule),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 19),
+                ("TOPPADDING", (0, 0), (-1, -1), 19),
+                ("LEFTPADDING", (0, 0), (-1, -1), 26),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 26),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+
+    amount_left = [
+        Paragraph("TOTAL AMOUNT DUE", template_styles["amount_label"]),
+        Spacer(1, 3 * mm),
+        Paragraph(f"USD {amount_due:,.2f}", template_styles["amount_value"]),
+    ]
+    amount_right = [
+        Paragraph(
+            "This notice authorises collection of the stated amount at any authorised ZCAMS partner bank. "
+            "Present this document together with your company identification.",
+            template_styles["body"],
+        ),
+        Spacer(1, 3 * mm),
+        Paragraph(
+            f'Bank Invoice Ref: <font backColor="#FDF6E3"><b>{safe(capitalpay_no)}</b></font> — must be quoted on all bank transactions.',
+            template_styles["body"],
+        ),
+    ]
+    amount_band = Table([[amount_left, amount_right]], colWidths=[page_w * 0.34, page_w * 0.66])
+    amount_band.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, 0), accent),
+                ("BACKGROUND", (1, 0), (1, 0), colors.white),
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("TOPPADDING", (0, 0), (-1, -1), 22),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 22),
+                ("LEFTPADDING", (0, 0), (0, 0), 26),
+                ("RIGHTPADDING", (0, 0), (0, 0), 20),
+                ("LEFTPADDING", (1, 0), (1, 0), 22),
+                ("RIGHTPADDING", (1, 0), (1, 0), 26),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
+
+    banks_section = _authorised_collection_banks_section(
+        page_w,
+        section_label_style=template_styles["pill_label"],
+        rule=rule,
+        bank_bg=bank_bg,
+    )
+
+    instruction_text = (
+        "Present this invoice at an accepted bank and quote the Bank Invoice reference exactly as shown. "
+        "Ensure the narration matches the reference above."
+    )
+    if payment_link:
+        instruction_text += (
+            '<br/><br/><font color="#06451F"><b>Secure ZCAMS checkout link:</b></font> '
+            f'<font backColor="#EAF6EC" color="#06451F"><b>{safe(payment_link)}</b></font>'
+        )
+    instruction_section = Table(
+        [
+            [Paragraph("PAYMENT INSTRUCTION", template_styles["instruction_title"])],
+            [Paragraph(instruction_text, template_styles["instruction_body"])],
+        ],
+        colWidths=[page_w],
+    )
+    instruction_section.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), COLOR_MINT_BG),
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("LINEBEFORE", (0, 0), (0, -1), 4, COLOR_ZCAMS_GREEN),
+                ("TOPPADDING", (0, 0), (-1, -1), 14),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+                ("LEFTPADDING", (0, 0), (-1, -1), 26),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 26),
+            ]
+        )
+    )
+
+    footer_text = [
+        Paragraph("Official Payment Collection Notice — ZCAMS", template_styles["footer_title"]),
+        Paragraph(
+            "This document is computer-generated by the Zambia Clearing Agency Management System (ZCAMS) and is valid without a physical "
+            "signature. It constitutes an official payment notice under the ZCAMS regulatory framework. Retain this document and the bank "
+            "receipt as proof of payment.",
+            template_styles["footer_body"],
+        ),
+        Spacer(1, 2 * mm),
+        Paragraph(f"Generated: {safe(issued_display)} &nbsp;·&nbsp; Bank Invoice Ref: {safe(capitalpay_no)} &nbsp;·&nbsp; zcams.info", template_styles["footer_meta"]),
+    ]
+    stamp = Table([[Paragraph("ZCAMS<br/>CERTIFIED<br/>DOCUMENT", template_styles["stamp"])]], colWidths=[18 * mm], rowHeights=[18 * mm])
+    stamp.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 1, colors.HexColor("#C0BDB5")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    footer = Table([[footer_text, stamp]], colWidths=[page_w - 28 * mm, 28 * mm])
+    footer.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), footer_bg),
+                ("BOX", (0, 0), (-1, -1), 0.75, rule),
+                ("TOPPADDING", (0, 0), (-1, -1), 16),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 16),
+                ("LEFTPADDING", (0, 0), (-1, -1), 26),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 26),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+
+    story: list[Any] = [
+        header,
+        pill_row,
+        body_grid,
+        amount_band,
+        banks_section,
+        instruction_section,
+        footer,
+    ]
+
+    doc.build(story)
     return path
 
 

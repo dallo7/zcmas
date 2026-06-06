@@ -1,31 +1,7 @@
 /**
- * ZCAMS keyboard shortcuts (Alt + number jumps to workflow pages).
+ * ZCAMS modal keyboard helpers.
  */
 (function () {
-  const ROUTES = {
-    "1": "/dashboard",
-    "2": "/bls",
-    "3": "/reviewed-bl",
-    "4": "/invoices",
-    "5": "/checkout",
-  };
-
-  document.addEventListener("keydown", function (event) {
-    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-      return;
-    }
-    const route = ROUTES[event.key];
-    if (!route) {
-      return;
-    }
-    const onPublic = ["/login", "/onboarding", "/"].includes(window.location.pathname);
-    if (onPublic) {
-      return;
-    }
-    event.preventDefault();
-    window.location.pathname = route;
-  });
-
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") {
       return;

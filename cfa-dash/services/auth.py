@@ -14,10 +14,12 @@ from services.repository import DEMO_USER_ID, normalize_role, row, rows, new_id,
 
 
 ROLE_SUPER_ADMIN = "SUPER_ADMIN"
+ROLE_ADMIN = "ADMIN"
+ROLE_OPERATIONS = "OPERATIONS"
 ROLE_COMPANY_ADMIN = "COMPANY_ADMIN"
 ROLE_DECLARANT = "DECLARANT"
 
-PUBLIC_PATHS = {"/login", "/onboarding", "/contract-sign"}
+PUBLIC_PATHS = {"/login", "/onboarding", "/contract-sign", "/tutorials"}
 
 OPERATIONAL_PATHS = {
     "/dashboard",
@@ -31,6 +33,7 @@ OPERATIONAL_PATHS = {
     "/support",
     "/chat",
     "/gn83",
+    "/tutorials",
 }
 
 COMPANY_ADMIN_PATHS = OPERATIONAL_PATHS | {
@@ -39,8 +42,26 @@ COMPANY_ADMIN_PATHS = OPERATIONAL_PATHS | {
     "/change-password",
 }
 
+ADMIN_PATHS = {
+    "/admin-support",
+    "/notifications",
+    "/support",
+    "/chat",
+    "/gn83",
+    "/tutorials",
+    "/change-password",
+}
+
+OPERATIONS_PATHS = {
+    "/operations",
+    "/tutorials",
+    "/change-password",
+}
+
 SUPER_ADMIN_PATHS = {
     "/super-admin",
+    "/operations",
+    "/admin-support",
     *OPERATIONAL_PATHS,
     "/admin",
     "/company-profile",
@@ -135,6 +156,30 @@ def record_login_event(
                 _client_ip(),
                 _user_agent(),
                 failure_reason or None,
+            ),
+        )
+        conn.commit()
+
+
+def record_registration_link_click(
+    *,
+    user_id: str | None,
+    email: str | None,
+    source: str | None = "registration",
+) -> None:
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO registration_link_events (id, user_id, email, source, ip_address, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                new_id("regclick"),
+                user_id or None,
+                (email or "").strip().lower() or None,
+                (source or "registration")[:80],
+                _client_ip(),
+                _user_agent(),
             ),
         )
         conn.commit()
@@ -243,6 +288,10 @@ def login_user(user: dict) -> dict:
 def default_home(role: str | None) -> str:
     if normalize_role(role) == ROLE_SUPER_ADMIN:
         return "/super-admin"
+    if normalize_role(role) == ROLE_ADMIN:
+        return "/admin-support"
+    if normalize_role(role) == ROLE_OPERATIONS:
+        return "/operations"
     return "/dashboard"
 
 
@@ -253,6 +302,10 @@ def path_allowed(role: str | None, pathname: str) -> bool:
     role = normalize_role(role)
     if role == ROLE_SUPER_ADMIN:
         return path in SUPER_ADMIN_PATHS or path.startswith("/super-admin")
+    if role == ROLE_ADMIN:
+        return path in ADMIN_PATHS
+    if role == ROLE_OPERATIONS:
+        return path in OPERATIONS_PATHS
     if role == ROLE_COMPANY_ADMIN:
         return path in COMPANY_ADMIN_PATHS
     if role == ROLE_DECLARANT:
@@ -262,6 +315,10 @@ def path_allowed(role: str | None, pathname: str) -> bool:
 
 def role_label(role: str | None) -> str:
     role = normalize_role(role)
+    if role == ROLE_ADMIN:
+        return "Admin Support"
+    if role == ROLE_OPERATIONS:
+        return "Operations"
     if role == ROLE_DECLARANT:
         return "Declarant / Agent"
     return role.replace("_", " ").title()

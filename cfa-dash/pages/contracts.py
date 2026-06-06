@@ -1,7 +1,7 @@
 from dash import ALL, Input, Output, State, callback, ctx, dcc, html, no_update, register_page
 from dash.exceptions import PreventUpdate
 
-from components.layout import header
+from components.layout import header, section_label
 from components.icons import icon
 from components.ui import badge, detail_item, status_table
 from services import repository
@@ -46,7 +46,11 @@ def layout(**_kwargs):
                                 ],
                                 className="section-heading-row",
                             ),
-                            html.H3("Client Info"),
+                            section_label(
+                                "Client Info",
+                                "Identifies the importer or client who will receive and sign the contract.",
+                                "lucide:user-round",
+                            ),
                             html.Div(
                                 [
                                     _field(
@@ -64,7 +68,11 @@ def layout(**_kwargs):
                                 ],
                                 className="form-grid",
                             ),
-                            html.H3("Shipment Details"),
+                            section_label(
+                                "Shipment Details",
+                                "Links the contract to the shipment route, BL reference, cargo, origin, and destination.",
+                                "lucide:ship",
+                            ),
                             html.Div(
                                 [
                                     _field(
@@ -118,7 +126,11 @@ def layout(**_kwargs):
                                 ],
                                 className="form-grid",
                             ),
-                            html.H3("Services & Fees"),
+                            section_label(
+                                "Services & Fees",
+                                "Defines the clearing services, reimbursements, taxes, and payment terms agreed with the client.",
+                                "lucide:receipt-text",
+                            ),
                             html.Div(
                                 [
                                     _field(
@@ -140,7 +152,11 @@ def layout(**_kwargs):
                                 ],
                                 className="form-grid",
                             ),
-                            html.H3("Contract Terms"),
+                            section_label(
+                                "Contract Terms",
+                                "Stores the legal terms attached to the contract before preview and client signing.",
+                                "lucide:file-text",
+                            ),
                             _field(
                                 "Attached Terms of Contract",
                                 dcc.Textarea(
@@ -157,6 +173,10 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             html.H2("Contract Register"),
+                            html.P(
+                                "Search existing contracts, signature status, hashes, and importer details for follow-up.",
+                                className="muted section-lead",
+                            ),
                             _table_toolbar("contracts-search", "Search contracts by number, importer, email, status, signature, or fingerprint..."),
                             html.Div(id="contract-register"),
                             html.Div(id="contracts-pagination"),
@@ -269,7 +289,7 @@ def _contract_register(contracts: list[dict]):
                             id={"type": "send-contract", "id": contract["id"]},
                             className="contract-action-icon email",
                             type="button",
-                            title="Send email OTP",
+                            title="Send or resend email OTP",
                             disabled=contract["status"] == "SIGNED",
                         ),
                         html.A(
@@ -434,7 +454,7 @@ def _send_panel(contract: dict):
                 html.P("Send options", className="detail-label"),
                 html.Div(
                     [
-                        html.Button("Send Email OTP", id="contract-send-email", className="btn-primary", type="button"),
+                        html.Button("Send / Resend Email OTP", id="contract-send-email", className="btn-primary", type="button"),
                         dcc.Checklist(
                             id="contract-attach-pdf",
                             options=[{"label": "Attach developed contract PDF", "value": "PDF"}],

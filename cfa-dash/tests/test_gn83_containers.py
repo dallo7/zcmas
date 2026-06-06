@@ -55,7 +55,6 @@ BL1 = {
     "bl_number": "MSC8466112528",
     "containers": 1,
     "std_min": 150.0,
-    "service_total": 35.0,
     "full_total": 209.0,
 }
 BL4 = {
@@ -64,8 +63,7 @@ BL4 = {
     "bl_number": "HLCU9507597961",
     "containers": 10,
     "std_min": 1500.0,
-    "service_total": 348.0,
-    "full_total": 2124.0,
+    "full_total": 2088.0,
 }
 
 
@@ -76,16 +74,12 @@ def test_lookup_fee_multiplies_per_container():
 
 
 def test_calculate_invoice_uses_twenty_percent_admin_and_sixteen_vat():
-    service = calculate_invoice(1500.0, "SERVICE_FEE_ONLY")
     full = calculate_invoice(1500.0, "FULL_SETTLEMENT")
-    assert service == {"std_min_fee": 1500.0, "admin_fee": 300.0, "vat": 48.0, "total": 348.0}
     assert full == {"std_min_fee": 1500.0, "admin_fee": 300.0, "vat": 288.0, "total": 2088.0}
 
 
 def test_calculate_invoice_single_20ft_container():
-    service = calculate_invoice(150.0, "SERVICE_FEE_ONLY")
     full = calculate_invoice(150.0, "FULL_SETTLEMENT")
-    assert service == {"std_min_fee": 150.0, "admin_fee": 30.0, "vat": 4.8, "total": 35.0}
     assert full == {"std_min_fee": 150.0, "admin_fee": 30.0, "vat": 28.8, "total": 209.0}
 
 
@@ -116,13 +110,20 @@ def test_e2e_ten_container_invoice_amounts():
     assert quote["std_min_fee"] == BL4["std_min"]
     assert quote["units"] == 10
 
-    service_inv = generate_invoice(reviewed["id"], "SERVICE_FEE_ONLY", contact_phone="0971234567")
-    reviewed_id = reviewed["id"]
-    assert service_inv["std_min_fee"] == 1500.0
-    assert service_inv["admin_fee"] == 300.0
-    assert service_inv["total"] == 348.0
-
     full_inv = generate_invoice(
+        reviewed["id"],
+        "FULL_SETTLEMENT",
+        contact_phone="0971234567",
+        beneficiary_name="ETS ARAKA",
+        beneficiary_bank_name="Stanbic",
+        beneficiary_account_number="1234567890",
+    )
+    reviewed_id = reviewed["id"]
+    assert full_inv["std_min_fee"] == 1500.0
+    assert full_inv["admin_fee"] == 300.0
+    assert full_inv["total"] == 2088.0
+
+    repeat_full_inv = generate_invoice(
         reviewed_id,
         "FULL_SETTLEMENT",
         contact_phone="0971234567",
@@ -130,13 +131,13 @@ def test_e2e_ten_container_invoice_amounts():
         beneficiary_bank_name="Stanbic",
         beneficiary_account_number="1234567890",
     )
-    assert full_inv["total"] == 2088.0
+    assert repeat_full_inv["total"] == 2088.0
 
     client = server.test_client()
     user = authenticate_user("companyadmin", "demo123")
     assert user
     auth.install_client_session(client, user)
-    assert client.get(f"/download/invoice/{service_inv['id']}.pdf").status_code == 200
+    assert client.get(f"/download/invoice/{full_inv['id']}.pdf").status_code == 200
 
 
 def test_extract_bl1_pdf_when_available():

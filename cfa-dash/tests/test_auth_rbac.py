@@ -10,6 +10,23 @@ def test_normalize_role_maps_agent_to_declarant():
 
 def test_path_allowed_by_role():
     assert auth.path_allowed(auth.ROLE_SUPER_ADMIN, "/super-admin")
+    assert auth.path_allowed(auth.ROLE_SUPER_ADMIN, "/operations")
+    assert auth.path_allowed(auth.ROLE_SUPER_ADMIN, "/admin-support")
+    assert auth.path_allowed(auth.ROLE_OPERATIONS, "/operations")
+    assert not auth.path_allowed(auth.ROLE_OPERATIONS, "/super-admin")
+    assert not auth.path_allowed(auth.ROLE_OPERATIONS, "/admin-support")
+    assert not auth.path_allowed(auth.ROLE_OPERATIONS, "/admin")
+    assert auth.path_allowed(auth.ROLE_ADMIN, "/admin-support")
+    assert auth.path_allowed(auth.ROLE_ADMIN, "/support")
+    assert auth.path_allowed(auth.ROLE_ADMIN, "/notifications")
+    assert auth.path_allowed(auth.ROLE_ADMIN, "/chat")
+    assert not auth.path_allowed(auth.ROLE_ADMIN, "/super-admin")
+    assert not auth.path_allowed(auth.ROLE_ADMIN, "/operations")
+    assert not auth.path_allowed(auth.ROLE_ADMIN, "/admin")
+    assert not auth.path_allowed(auth.ROLE_COMPANY_ADMIN, "/admin-support")
+    assert not auth.path_allowed(auth.ROLE_DECLARANT, "/admin-support")
+    assert not auth.path_allowed(auth.ROLE_COMPANY_ADMIN, "/operations")
+    assert not auth.path_allowed(auth.ROLE_DECLARANT, "/operations")
     assert auth.path_allowed(auth.ROLE_COMPANY_ADMIN, "/admin")
     assert auth.path_allowed(auth.ROLE_COMPANY_ADMIN, "/company-profile")
     assert not auth.path_allowed(auth.ROLE_DECLARANT, "/company-profile")
@@ -20,6 +37,8 @@ def test_path_allowed_by_role():
 
 def test_default_home_by_role():
     assert auth.default_home(auth.ROLE_SUPER_ADMIN) == "/super-admin"
+    assert auth.default_home(auth.ROLE_ADMIN) == "/admin-support"
+    assert auth.default_home(auth.ROLE_OPERATIONS) == "/operations"
     assert auth.default_home(auth.ROLE_COMPANY_ADMIN) == "/dashboard"
     assert auth.default_home(auth.ROLE_DECLARANT) == "/dashboard"
 
@@ -29,15 +48,44 @@ def test_super_admin_nav_has_operations_without_support_modules():
 
     primary, admin, secondary = nav_items_for_user({"role": auth.ROLE_SUPER_ADMIN})
     primary_paths = [item[0].split("#", 1)[0] for item in primary]
+    admin_paths = [item[0].split("#", 1)[0] for item in admin]
     secondary_paths = [item[0] for item in secondary]
 
     assert "/dashboard" in primary_paths
+    assert "/operations" in admin_paths
+    assert "/admin-support" in admin_paths
     assert "/bls" in primary_paths
     assert "/reviewed-bl" in primary_paths
     assert "/admin" in [item[0] for item in admin]
     assert "/notifications" not in secondary_paths
     assert "/support" not in secondary_paths
     assert "/chat" in secondary_paths
+
+
+def test_admin_support_nav_is_support_focused():
+    from components.layout import nav_items_for_user
+
+    primary, admin, secondary = nav_items_for_user({"role": auth.ROLE_ADMIN})
+    primary_paths = [item[0] for item in primary]
+    secondary_paths = [item[0] for item in secondary]
+
+    assert "/admin-support" in primary_paths
+    assert "/support" in primary_paths
+    assert "/notifications" in primary_paths
+    assert "/super-admin" not in primary_paths
+    assert "/operations" not in primary_paths
+    assert admin == []
+    assert "/chat" in secondary_paths
+    assert "/gn83" in secondary_paths
+
+
+def test_operations_nav_is_operations_only():
+    from components.layout import nav_items_for_user
+
+    primary, admin, secondary = nav_items_for_user({"role": auth.ROLE_OPERATIONS})
+    assert [item[0] for item in primary] == ["/operations"]
+    assert admin == []
+    assert secondary == []
 
 
 def test_session_create_and_resolve(app_ctx):

@@ -58,9 +58,7 @@ The database is created automatically when the Dash app starts.
 - Z-SAD detachment retires the old number and cancels old invoices
 - GN 83 minimum fee lookup for Import, Export, and Transit
 - Full Settlement invoice formula: standard minimum + 20% admin + 16% VAT on subtotal (ceiled)
-- Service Fee Only invoice formula: 20% admin fee + 16% VAT on admin fee (ceiled)
 - Full Settlement auto-releases cargo after payment settlement
-- Service Fee Only enables manual cargo release after payment settlement
 - Notifications and audit records are persisted
 
 ## Integrations

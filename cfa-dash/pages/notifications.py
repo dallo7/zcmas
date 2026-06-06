@@ -20,6 +20,10 @@ def layout(**_kwargs):
                 html.Div(
                     [
                         html.Div(id="notification-summary"),
+                        html.P(
+                            "Use this report to reconstruct ZCAMS events across onboarding, BLs, Z-SADs, invoices, payments, release, contracts, and support.",
+                            className="muted section-lead",
+                        ),
                         dcc.Input(
                             id="notification-search",
                             placeholder="Search notifications by event, message, company, or entity...",
@@ -68,7 +72,7 @@ def _notification_list(notes: list[dict]):
 def render_notifications(pathname, user, search):
     if (pathname or "") != "/notifications":
         raise PreventUpdate
-    company_id = None if (user or {}).get("role") == "SUPER_ADMIN" else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    company_id = None if (user or {}).get("role") in {"SUPER_ADMIN", "ADMIN"} else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
     notes = repository.list_notifications(company_id=company_id)
     if search:
         q = search.strip().lower()

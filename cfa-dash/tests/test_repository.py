@@ -1,3 +1,5 @@
+import pytest
+
 from services.gn83 import calculate_invoice, lookup_fee
 from services.repository import (
     DEMO_COMPANY_ID,
@@ -8,25 +10,35 @@ from services.repository import (
     authenticate_user,
     bootstrap,
     change_user_password,
+    correct_reviewed_bl_for_asycuda,
     contract_fingerprint,
+    create_bl,
     create_contract,
+    create_company_user,
+    create_onboarding,
     create_system_user,
     delete_registry_company,
     delete_system_user,
     get_system_user,
+    row,
     parse_shipment_details,
     generate_zsad_number,
+    get_bl,
+    get_reviewed_bl,
     invoice_download_url,
     invoice_capitalpay_number,
     invoice_share_message,
     list_invoices_for_user,
     list_system_users,
+    resend_user_credentials,
+    review_bl,
     set_registry_company_status,
     set_system_user_status,
     send_contract_to_importer,
     send_contract_review_email,
     sign_contract_with_otp,
     update_registry_company,
+    update_bl,
     update_system_user,
 )
 
@@ -46,11 +58,9 @@ def test_generate_zsad_number_format():
 def test_gn83_lookup_and_invoice_calculation():
     std = lookup_fee("Import", "Sea", "MOTOR_VEHICLE")
     full = calculate_invoice(std, "FULL_SETTLEMENT")
-    service = calculate_invoice(std, "SERVICE_FEE_ONLY")
 
     assert std == 130.0
     assert full == {"std_min_fee": 130.0, "admin_fee": 26.0, "vat": 24.96, "total": 181.0}
-    assert service == {"std_min_fee": 130.0, "admin_fee": 26.0, "vat": 4.16, "total": 31.0}
 
 
 def test_invoice_share_message_uses_gn83_total():
@@ -58,7 +68,7 @@ def test_invoice_share_message_uses_gn83_total():
         {
             "id": "inv-test",
             "invoice_number": "INV-TEST",
-            "invoice_type": "SERVICE_FEE_ONLY",
+            "invoice_type": "FULL_SETTLEMENT",
             "bl_number": "BL1",
             "z_sad_number": "Z-SAD-1",
             "total": 35.0,
@@ -109,6 +119,161 @@ def test_admin_dashboard_helpers_are_company_scoped():
     assert isinstance(audits, list)
 
 
+def test_saved_bl_can_be_amended_before_review():
+    import uuid
+
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8].upper()
+    bl = create_bl(
+        {
+            "bl_number": f"BL-AMEND-{suffix}",
+            "doc_type": "Bill of Lading",
+            "route_type": "Import",
+            "transport_mode": "Sea",
+            "zra_regime": "IM4 Home Use",
+            "consignee_name": "Original Consignee",
+            "consignee_tin": "1000000000",
+            "origin": "Durban",
+            "destination": "Lusaka",
+            "no_containers": 1,
+            "gross_weight": 10,
+            "cargo_description": "Original cargo",
+            "gn83_category": "20FT_CONTAINER",
+            "file_name": "amend-test.pdf",
+        },
+        use_ocr_defaults=False,
+    )
+
+    amended = update_bl(
+        bl["id"],
+        {
+            "bl_number": f"BL-AMENDED-{suffix}",
+            "doc_type": "Bill of Lading",
+            "route_type": "Import",
+            "transport_mode": "Sea",
+            "zra_regime": "IM4 Home Use",
+            "consignee_name": "Amended Consignee",
+            "consignee_tin": "2000000000",
+            "origin": "Dar es Salaam",
+            "destination": "Ndola",
+            "no_containers": 2,
+            "gross_weight": 20,
+            "cargo_description": "Amended cargo",
+            "gn83_category": "20FT_CONTAINER",
+            "file_name": "amended-test.pdf",
+        },
+    )
+
+    assert amended["bl_number"] == f"BL-AMENDED-{suffix}"
+    assert amended["consignee_name"] == "Amended Consignee"
+    assert amended["no_containers"] == 2
+    assert get_bl(bl["id"])["cargo_items"][0]["description"] == "Amended cargo"
+
+
+def test_reviewed_bl_cannot_be_amended():
+    import uuid
+
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8].upper()
+    bl = create_bl(
+        {
+            "bl_number": f"BL-LOCKED-{suffix}",
+            "doc_type": "Bill of Lading",
+            "route_type": "Import",
+            "transport_mode": "Sea",
+            "zra_regime": "IM4 Home Use",
+            "consignee_name": "Locked Consignee",
+            "consignee_tin": "3000000000",
+            "origin": "Durban",
+            "destination": "Lusaka",
+            "no_containers": 1,
+            "gross_weight": 10,
+            "cargo_description": "Locked cargo",
+            "gn83_category": "20FT_CONTAINER",
+            "file_name": "locked-test.pdf",
+        },
+        use_ocr_defaults=False,
+    )
+    review_bl(bl["id"])
+
+    with pytest.raises(ValueError, match="not been reviewed"):
+        update_bl(bl["id"], {**bl, "cargo_description": "Invalid amendment"})
+
+
+def test_asycuda_correction_retains_zsad_and_cancels_open_invoice():
+    import os
+    import uuid
+
+    from services.repository import generate_invoice, list_z_sad_history
+
+    os.environ["CAPITALPAY_MODE"] = "mock"
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8].upper()
+    bl = create_bl(
+        {
+            "bl_number": f"BL-ASYCUDA-{suffix}",
+            "doc_type": "Bill of Lading",
+            "route_type": "Import",
+            "transport_mode": "Sea",
+            "zra_regime": "IM4 Home Use",
+            "consignee_name": "Original Consignee",
+            "consignee_tin": "4000000000",
+            "origin": "Durban",
+            "destination": "Lusaka",
+            "no_containers": 1,
+            "gross_weight": 10,
+            "cargo_description": "Original cargo",
+            "gn83_category": "20FT_CONTAINER",
+            "file_name": "asycuda-test.pdf",
+        },
+        auto_review=True,
+        use_ocr_defaults=False,
+    )
+    reviewed = get_reviewed_bl(bl["reviewed_bl"]["id"])
+    old_zsad = reviewed["z_sad_number"]
+    invoice = generate_invoice(
+        reviewed["id"],
+        "FULL_SETTLEMENT",
+        contact_phone="0971234567",
+        beneficiary_name="Original Consignee",
+        beneficiary_bank_name="Stanbic",
+        beneficiary_account_number="1234567890",
+    )
+
+    corrected = correct_reviewed_bl_for_asycuda(
+        reviewed["id"],
+        {
+            "bl_number": f"BL-ASYCUDA-{suffix}",
+            "doc_type": "Bill of Lading",
+            "route_type": "Import",
+            "transport_mode": "Sea",
+            "zra_regime": "IM4 Home Use",
+            "company_name": "Corrected Company",
+            "consignee_name": "Corrected Consignee",
+            "consignee_tin": "4999999999",
+            "consignor_tin": "SHIPPER-ASY",
+            "origin": "Dar es Salaam",
+            "destination": "Ndola",
+            "no_containers": 2,
+            "gross_weight": 20,
+            "cargo_description": "Corrected cargo",
+            "gn83_category": "20FT_CONTAINER",
+            "gn83_unit": "Container",
+            "gn83_fee_usd": 300,
+        },
+        correction_reason="ASYCUDA requested consignee TIN correction.",
+        company_id=DEMO_COMPANY_ID,
+    )
+
+    assert corrected["z_sad_number"] == old_zsad
+    assert corrected["consignee_name"] == "Corrected Consignee"
+    assert get_bl(bl["id"])["cargo_items"][0]["description"] == "Corrected cargo"
+    assert row("SELECT status FROM invoices WHERE id = ?", (invoice["id"],))["status"] == "CANCELLED"
+    history = list_z_sad_history(reviewed["id"])
+    assert sum(1 for item in history if item["z_sad_number"] == old_zsad) == 1
+    assert any(item["z_sad_number"] == old_zsad and item["is_active"] == 1 for item in history)
+
+
 def test_super_admin_can_create_system_user():
     import uuid
 
@@ -130,6 +295,65 @@ def test_super_admin_can_create_system_user():
     assert user["must_change_password"] is True
     assert "email_result" in user
     assert users and users[0]["email"] == email
+
+
+def test_system_user_creation_allows_operations_role():
+    import uuid
+
+    bootstrap()
+    email = f"operations-created-{uuid.uuid4().hex[:8]}@example.com"
+    user = create_system_user(
+        DEMO_COMPANY_ID,
+        "Ops",
+        "Created",
+        email,
+        "OPERATIONS",
+        password="demo12345",
+    )
+    try:
+        assert user["email"] == email
+        assert user["role"] == "OPERATIONS"
+    finally:
+        delete_system_user(user["id"])
+
+
+def test_company_admin_creation_is_declarant_only():
+    import uuid
+
+    bootstrap()
+    email = f"company-admin-blocked-{uuid.uuid4().hex[:8]}@example.com"
+    with pytest.raises(ValueError, match="only create Declarant"):
+        create_company_user(
+            DEMO_COMPANY_ID,
+            "Blocked",
+            "CompanyAdmin",
+            email,
+            role="COMPANY_ADMIN",
+        )
+
+
+def test_onboarding_creates_company_admin():
+    import uuid
+
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8]
+    payload = {
+        "first_name": "CFA",
+        "last_name": "Owner",
+        "email": f"onboarding-admin-{suffix}@example.com",
+        "username": f"onboardingadmin{suffix}",
+        "password": "TempPass123!",
+        "phone": "260970000000",
+        "whatsapp": "260970000000",
+        "company_name": f"Onboarding CFA {suffix}",
+        "company_email": f"company-{suffix}@example.com",
+    }
+    result = create_onboarding(payload, [])
+    try:
+        user = row("SELECT role FROM users WHERE id = ?", (result["user_id"],))
+        assert user["role"] == "COMPANY_ADMIN"
+    finally:
+        delete_registry_company(result["company_id"])
 
 
 def test_created_user_must_change_password_then_can_clear_flag():
@@ -155,6 +379,39 @@ def test_created_user_must_change_password_then_can_clear_flag():
     assert authenticated["must_change_password"] is True
     assert updated["must_change_password"] is False
     assert authenticated_after["must_change_password"] is False
+
+
+def test_resend_user_credentials_generates_new_first_login_password(monkeypatch):
+    import uuid
+
+    sent_messages = []
+
+    def fake_send_registration(to_email, subject, body, **kwargs):
+        sent_messages.append({"to_email": to_email, "subject": subject, "body": body, **kwargs})
+        return {"sent": True, "mode": "test"}
+
+    monkeypatch.setattr("services.repository.send_new_user_registration_email", fake_send_registration)
+    bootstrap()
+    suffix = uuid.uuid4().hex[:8]
+    email = f"resend-credentials-{suffix}@example.com"
+    created = create_system_user(
+        DEMO_COMPANY_ID,
+        "Resend",
+        "Credentials",
+        email,
+        "DECLARANT",
+        username=f"resendcredentials{suffix}",
+        password="OldTemp123!",
+    )
+    delivery = resend_user_credentials(created["id"], source="test-resend", actor_role="SUPER_ADMIN")
+    try:
+        assert delivery["email_result"]["sent"] is True
+        assert delivery["temp_password"] != "OldTemp123!"
+        assert authenticate_user(email, "OldTemp123!") is None
+        assert authenticate_user(email, delivery["temp_password"])["must_change_password"] is True
+        assert sent_messages[-1]["to_email"] == email
+    finally:
+        delete_system_user(created["id"])
 
 
 def test_super_admin_can_update_suspend_activate_and_delete_system_user():
@@ -228,7 +485,7 @@ def test_contract_signing_requires_otp_and_stores_fingerprint():
         "Importer authorizes the agent to clear the shipment.",
         shipment_details="1x40ft container from Dar es Salaam to Lusaka.",
         services="Customs clearance, document handling, delivery coordination.",
-        fees="Service fee USD 250 plus statutory disbursements.",
+        fees="Agency charge USD 250 plus statutory disbursements.",
         company_id=DEMO_COMPANY_ID,
     )
 
@@ -244,7 +501,7 @@ def test_contract_signing_requires_otp_and_stores_fingerprint():
     assert signed["signed_email"] == "otp-importer@example.com"
     assert len(signed["contract_hash"]) == 64
     tampered_hash = contract_fingerprint(
-        {**signed, "fees": "Service fee USD 251 plus statutory disbursements."},
+        {**signed, "fees": "Agency charge USD 251 plus statutory disbursements."},
         signed_email=signed["signed_email"],
         signature_name=signed["signature_name"],
         signature_text=signed["signature_text"],

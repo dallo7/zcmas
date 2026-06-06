@@ -61,7 +61,7 @@ def five_value_snapshot(
             "gross_weight": _float(gross_weight),
             "no_containers": _int(no_containers),
             "gn83_category": gn83_category or data.get("gn83_category") or "LOOSE_LCL",
-            "invoice_type": invoice_type or "SERVICE_FEE_ONLY",
+            "invoice_type": "FULL_SETTLEMENT",
         }
     )
     return data
@@ -77,8 +77,8 @@ def validate_five_values(data: dict, *, confirmed: bool, channels: list[str] | N
         missing.append("Gross Weight")
     if data.get("no_containers") is None:
         missing.append("No. of containers / loose cargo / LCL")
-    if data.get("invoice_type") not in {"SERVICE_FEE_ONLY", "FULL_SETTLEMENT"}:
-        missing.append("Service Fee Only / Full Settlement")
+    if data.get("invoice_type") != "FULL_SETTLEMENT":
+        missing.append("Full Settlement")
     selected = {str(channel).upper() for channel in (channels or [])}
     if "EMAIL" in selected and not str(email or "").strip():
         missing.append("Client email")
@@ -128,6 +128,9 @@ def generate_and_share_agentic_invoice(
     email: str | None,
     phone: str | None,
     channels: list[str] | None,
+    beneficiary_name: str | None = None,
+    beneficiary_bank_name: str | None = None,
+    beneficiary_account_number: str | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     cache_key = (idempotency_key or "").strip()
@@ -136,11 +139,29 @@ def generate_and_share_agentic_invoice(
             cached = _SHARE_CACHE.get(cache_key)
             if cached:
                 return cached
-            result = _generate_and_share_invoice(reviewed_id, invoice_type=invoice_type, email=email, phone=phone, channels=channels)
+            result = _generate_and_share_invoice(
+                reviewed_id,
+                invoice_type=invoice_type,
+                email=email,
+                phone=phone,
+                channels=channels,
+                beneficiary_name=beneficiary_name,
+                beneficiary_bank_name=beneficiary_bank_name,
+                beneficiary_account_number=beneficiary_account_number,
+            )
             _SHARE_CACHE[cache_key] = result
             return result
 
-    return _generate_and_share_invoice(reviewed_id, invoice_type=invoice_type, email=email, phone=phone, channels=channels)
+    return _generate_and_share_invoice(
+        reviewed_id,
+        invoice_type=invoice_type,
+        email=email,
+        phone=phone,
+        channels=channels,
+        beneficiary_name=beneficiary_name,
+        beneficiary_bank_name=beneficiary_bank_name,
+        beneficiary_account_number=beneficiary_account_number,
+    )
 
 
 def generate_agentic_invoice_for_review(
@@ -149,6 +170,9 @@ def generate_agentic_invoice_for_review(
     invoice_type: str,
     email: str | None,
     phone: str | None,
+    beneficiary_name: str | None = None,
+    beneficiary_bank_name: str | None = None,
+    beneficiary_account_number: str | None = None,
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     cache_key = f"{(idempotency_key or '').strip()}:invoice"
@@ -162,6 +186,9 @@ def generate_agentic_invoice_for_review(
                 invoice_type,
                 contact_phone=str(phone or "").strip() or None,
                 contact_email=str(email or "").strip() or None,
+                beneficiary_name=str(beneficiary_name or "").strip() or None,
+                beneficiary_bank_name=str(beneficiary_bank_name or "").strip() or None,
+                beneficiary_account_number=str(beneficiary_account_number or "").strip() or None,
             )
             _SHARE_CACHE[cache_key] = {"invoice": invoice}
             return invoice
@@ -171,6 +198,9 @@ def generate_agentic_invoice_for_review(
         invoice_type,
         contact_phone=str(phone or "").strip() or None,
         contact_email=str(email or "").strip() or None,
+        beneficiary_name=str(beneficiary_name or "").strip() or None,
+        beneficiary_bank_name=str(beneficiary_bank_name or "").strip() or None,
+        beneficiary_account_number=str(beneficiary_account_number or "").strip() or None,
     )
 
 
@@ -210,12 +240,18 @@ def _generate_and_share_invoice(
     email: str | None,
     phone: str | None,
     channels: list[str] | None,
+    beneficiary_name: str | None = None,
+    beneficiary_bank_name: str | None = None,
+    beneficiary_account_number: str | None = None,
 ) -> dict[str, Any]:
     invoice = repository.generate_invoice(
         reviewed_id,
         invoice_type,
         contact_phone=str(phone or "").strip() or None,
         contact_email=str(email or "").strip() or None,
+        beneficiary_name=str(beneficiary_name or "").strip() or None,
+        beneficiary_bank_name=str(beneficiary_bank_name or "").strip() or None,
+        beneficiary_account_number=str(beneficiary_account_number or "").strip() or None,
     )
     share_results = repository.share_invoice_with_importer(
         invoice["id"],
@@ -261,6 +297,9 @@ def summarize_result(invoice: dict, reviewed: dict, share_results: dict) -> dict
         "pay_now_url": invoice_checkout_url(invoice["id"]),
         "whatsapp_url": (share_results.get("whatsapp") or {}).get("url"),
         "email": share_results.get("email"),
+        "beneficiary_name": invoice.get("beneficiary_name"),
+        "beneficiary_bank_name": invoice.get("beneficiary_bank_name"),
+        "beneficiary_account_number": invoice.get("beneficiary_account_number"),
     }
 
 

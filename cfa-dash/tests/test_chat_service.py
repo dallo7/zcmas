@@ -60,7 +60,7 @@ def test_chat_accepts_history_for_multi_turn(monkeypatch):
     )
 
     assert result["mode"] == "faq"
-    assert "Service Fee Only" in result["answer"]
+    assert "Full Settlement" in result["answer"]
 
 
 def test_chat_strips_model_prompt_echo(monkeypatch):

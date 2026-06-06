@@ -1,13 +1,19 @@
+import ipaddress
+
 import dash_ag_grid as dag
-from dash import Input, Output, State, callback, dash_table, dcc, html, no_update, register_page
+import requests
+from dash import ALL, Input, Output, State, callback, ctx, dash_table, dcc, html, no_update, register_page
 from dash.exceptions import PreventUpdate
 
 from components.icons import icon
-from components.layout import header
+from components.layout import header, section_label
 from services import auth, repository
+from services.bulk_registration import parse_bulk_registration_upload
 
 
 register_page(__name__, path="/super-admin", name="Super Admin")
+
+_GEO_IP_CACHE: dict[str, dict] = {}
 
 
 def _metric(label: str, value, *, icon_name: str, tone: str = "green", accent: str = "var(--zambia-green)"):
@@ -33,6 +39,26 @@ def _section_heading(title: str, icon_name: str, *, tone: str = "green"):
             html.H2(title),
         ],
         className="section-heading-with-icon",
+    )
+
+
+def _mail_progress(label: str = "Waiting for resend action.", percent: int = 0, state: str = "idle"):
+    visible = state != "idle"
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(label),
+                    html.Span(f"{max(0, min(100, int(percent)))}%"),
+                ],
+                className="mail-progress-label",
+            ),
+            html.Div(
+                html.Div(style={"width": f"{max(0, min(100, int(percent)))}%"}, className="mail-progress-fill"),
+                className="mail-progress-track",
+            ),
+        ],
+        className=f"mail-progress {state}{' is-visible' if visible else ''}",
     )
 
 
@@ -110,7 +136,8 @@ def _ag_grid(
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
             "rowSelection": "multiple",
-            "suppressRowClickSelection": True,
+            "rowMultiSelectWithClick": True,
+            "suppressRowClickSelection": False,
         },
         rowClassRules=row_class_rules or {},
         className="ag-theme-alpine zcams-ag-grid",
@@ -209,6 +236,356 @@ def _session_report_rows() -> list[dict]:
     ]
 
 
+def _network_label(ip_address: str | None) -> str:
+    ip = (ip_address or "").strip()
+    if not ip or ip == "-":
+        return "Unknown location"
+    if ip in {"127.0.0.1", "::1"}:
+        return "Local device"
+    if ip.startswith(("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.30.", "172.31.")):
+        return "Private network"
+    return "Public network"
+
+
+def _is_public_ip(ip_address: str | None) -> bool:
+    try:
+        parsed = ipaddress.ip_address((ip_address or "").strip())
+    except ValueError:
+        return False
+    return not (parsed.is_private or parsed.is_loopback or parsed.is_reserved or parsed.is_multicast)
+
+
+def _geo_lookup_ip(ip_address: str | None) -> dict:
+    ip = (ip_address or "").strip()
+    if not ip or ip == "-":
+        return {"status": "fail", "message": "No IP address was captured."}
+    if not _is_public_ip(ip):
+        return {
+            "status": "local",
+            "query": ip,
+            "label": _network_label(ip),
+            "message": "This IP is local/private, so public geo coordinates are not available.",
+        }
+    if ip in _GEO_IP_CACHE:
+        return _GEO_IP_CACHE[ip]
+    try:
+        response = requests.get(
+            f"http://ip-api.com/json/{ip}",
+            params={"fields": "status,message,country,regionName,city,lat,lon,isp,query,timezone"},
+            timeout=3,
+        )
+        data = response.json()
+    except Exception as exc:  # noqa: BLE001
+        data = {"status": "fail", "query": ip, "message": f"Geo lookup unavailable: {exc}"}
+    _GEO_IP_CACHE[ip] = data
+    return data
+
+
+def _geo_map_embed(lat: float, lon: float) -> html.Iframe:
+    delta = 0.04
+    bbox = f"{lon - delta},{lat - delta},{lon + delta},{lat + delta}"
+    return html.Iframe(
+        src=f"https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik&marker={lat},{lon}",
+        className="ip-geo-map-frame",
+        title="IP geo map",
+    )
+
+
+def _ip_geo_modal(ip_address: str | None, close_type: str = "super-admin-ip-geo-close") -> html.Div:
+    ip = (ip_address or "").strip() or "-"
+    geo = _geo_lookup_ip(ip)
+    has_coordinates = geo.get("status") == "success" and geo.get("lat") is not None and geo.get("lon") is not None
+    location_label = ", ".join(
+        part for part in (geo.get("city"), geo.get("regionName"), geo.get("country")) if part
+    ) or geo.get("label") or _network_label(ip)
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span(icon("lucide:map-pinned", 18), className="login-visibility-icon"),
+                            html.Div([html.H2("IP Geo Location"), html.P(f"Location lookup for {ip}", className="muted")]),
+                        ],
+                        className="modal-title-row",
+                    ),
+                    html.Button(
+                        "x",
+                        id={"type": close_type, "ip": ip},
+                        className="modal-close",
+                        type="button",
+                    ),
+                ],
+                className="modal-header",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H3([icon("lucide:crosshair", 15), " IP Details"]),
+                            html.Div([html.Span("IP address"), html.Strong(ip)]),
+                            html.Div([html.Span("Network type"), html.Strong(_network_label(ip))]),
+                            html.Div([html.Span("Location"), html.Strong(location_label)]),
+                            html.Div([html.Span("ISP"), html.Strong(geo.get("isp") or "-")]),
+                            html.Div([html.Span("Timezone"), html.Strong(geo.get("timezone") or "-")]),
+                        ],
+                        className="login-detail-card",
+                    ),
+                    html.Div(
+                        _geo_map_embed(float(geo["lat"]), float(geo["lon"]))
+                        if has_coordinates
+                        else html.Div(
+                            [
+                                icon("lucide:map", 32),
+                                html.Strong(location_label),
+                                html.Span(geo.get("message") or "No public map coordinates are available for this IP."),
+                            ],
+                            className="ip-geo-map-placeholder",
+                        ),
+                        className="ip-geo-map-card",
+                    ),
+                ],
+                className="login-detail-grid",
+            ),
+        ],
+        className="invoice-modal-card login-visibility-modal-card ip-geo-modal-card",
+    )
+
+
+def _device_label(user_agent: str | None) -> str:
+    ua = (user_agent or "").lower()
+    if not ua:
+        return "Unknown device"
+    device = "Mobile" if any(token in ua for token in ("mobile", "android", "iphone")) else "Desktop"
+    if "edg/" in ua:
+        browser = "Edge"
+    elif "chrome/" in ua:
+        browser = "Chrome"
+    elif "firefox/" in ua:
+        browser = "Firefox"
+    elif "safari/" in ua:
+        browser = "Safari"
+    else:
+        browser = "Browser"
+    return f"{device} - {browser}"
+
+
+def _login_visibility_data(session_id: str | None = None) -> dict:
+    selected = None
+    params: tuple = ()
+    where_clause = "1 = 1"
+    if session_id:
+        selected = repository.row(
+            """
+            SELECT s.*, u.first_name, u.last_name, u.email, u.username, u.role, u.company_id, c.name AS company_name
+            FROM user_sessions s
+            JOIN users u ON u.id = s.user_id
+            LEFT JOIN companies c ON c.id = u.company_id
+            WHERE s.id = ?
+            """,
+            (session_id,),
+        )
+    if selected:
+        where_clause = "(le.user_id = ? OR lower(le.email) = lower(?))"
+        params = (selected["user_id"], selected.get("email") or "")
+    events = repository.rows(
+        f"""
+        SELECT le.*, u.first_name, u.last_name, u.username, u.email AS user_email, u.role, c.name AS company_name
+        FROM login_events le
+        LEFT JOIN users u ON u.id = le.user_id
+        LEFT JOIN companies c ON c.id = u.company_id
+        WHERE {where_clause}
+        ORDER BY le.created_at DESC
+        LIMIT 80
+        """,
+        params,
+    )
+    sessions = auth.list_user_sessions(100)
+    active_sessions = [item for item in sessions if item.get("session_status") == "ACTIVE"]
+    unique_ips = {item.get("ip_address") for item in events if item.get("ip_address")}
+    success_count = sum(1 for item in events if int(item.get("success") or 0))
+    failed_count = sum(1 for item in events if not int(item.get("success") or 0))
+    return {
+        "selected": selected,
+        "events": events,
+        "summary": {
+            "events": len(events),
+            "successful": success_count,
+            "failed": failed_count,
+            "unique_ips": len(unique_ips),
+            "active_sessions": len(active_sessions),
+        },
+    }
+
+
+def _login_visibility_modal(session_id: str | None = None) -> html.Div:
+    data = _login_visibility_data(session_id)
+    selected = data["selected"]
+    events = data["events"]
+    summary = data["summary"]
+    latest = selected or (events[0] if events else {})
+    actor_name = f"{latest.get('first_name') or ''} {latest.get('last_name') or ''}".strip() or latest.get("email") or "Unknown user"
+    actor_email = latest.get("email") or latest.get("user_email") or "-"
+    actor_role = (latest.get("role") or "-").replace("_", " ").title()
+    actor_ip = latest.get("ip_address") or "-"
+    actor_device = _device_label(latest.get("user_agent"))
+    event_rows = [
+        [
+            (item.get("created_at") or "-")[:19],
+            item.get("company_name") or "-",
+            item.get("user_email") or item.get("email") or "-",
+            "Success" if int(item.get("success") or 0) else "Failed",
+            item.get("ip_address") or "-",
+            _network_label(item.get("ip_address")),
+            _device_label(item.get("user_agent")),
+            item.get("failure_reason") or "-",
+        ]
+        for item in events[:30]
+    ]
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Span(icon("lucide:map-pinned", 18), className="login-visibility-icon"),
+                            html.Div(
+                                [
+                                    html.H2("Login Visibility"),
+                                    html.P("Who signed in, from where, and how often.", className="muted"),
+                                ]
+                            ),
+                        ],
+                        className="modal-title-row",
+                    ),
+                    html.Button("x", id="super-admin-login-visibility-close", className="modal-close", type="button"),
+                ],
+                className="modal-header",
+            ),
+            html.Div(
+                [
+                    html.Div([html.Strong(str(summary["events"])), html.Span("Tracked attempts")], className="login-analytics-card info"),
+                    html.Div([html.Strong(str(summary["successful"])), html.Span("Successful logins")], className="login-analytics-card success"),
+                    html.Div([html.Strong(str(summary["failed"])), html.Span("Failed attempts")], className="login-analytics-card danger" if summary["failed"] else "login-analytics-card"),
+                    html.Div([html.Strong(str(summary["unique_ips"])), html.Span("Unique IPs")], className="login-analytics-card warning"),
+                    html.Div([html.Strong(str(summary["active_sessions"])), html.Span("Active sessions")], className="login-analytics-card blue"),
+                ],
+                className="login-analytics-grid",
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.H3([icon("lucide:user-round-check", 15), " Actor"]),
+                            html.Div([html.Span("Name"), html.Strong(actor_name)]),
+                            html.Div([html.Span("Email"), html.Strong(actor_email)]),
+                            html.Div([html.Span("Role"), html.Strong(actor_role)]),
+                            html.Div([html.Span("Company"), html.Strong(latest.get("company_name") or "-")]),
+                        ],
+                        className="login-detail-card",
+                    ),
+                    html.Div(
+                        [
+                            html.H3([icon("lucide:crosshair", 15), " Action Location"]),
+                            html.Div([html.Span("IP address"), html.Strong(actor_ip)]),
+                            html.Div([html.Span("Location"), html.Strong(_network_label(actor_ip))]),
+                            html.Div([html.Span("Device"), html.Strong(actor_device)]),
+                            html.P("Geo lookup is not enabled, so ZCAMS shows the captured IP/network type and browser/device fingerprint.", className="muted"),
+                        ],
+                        className="login-detail-card map-card",
+                    ),
+                ],
+                className="login-detail-grid",
+            ),
+            html.Div(
+                [
+                    html.H3([icon("lucide:history", 15), " Detailed login trail"]),
+                    _bulk_visibility_table(
+                        ["Time", "Company", "Email", "Result", "IP", "Location", "Device", "Reason"],
+                        event_rows,
+                    ),
+                ],
+                className="login-trail-section",
+            ),
+        ],
+        className="invoice-modal-card login-visibility-modal-card",
+    )
+
+
+def _recent_signin_activity_table() -> html.Div:
+    events = auth.list_login_events(25)
+    total = len(events)
+    successful = sum(1 for event in events if int(event.get("success") or 0))
+    failed = total - successful
+    captured_ips = [event.get("ip_address") for event in events if event.get("ip_address")]
+    unique_ips = len(set(captured_ips))
+    local_private = sum(1 for ip in captured_ips if _network_label(ip) in {"Local device", "Private network"})
+    public_ips = sum(1 for ip in captured_ips if _network_label(ip) == "Public network")
+    rows_data = []
+    for index, event in enumerate(events):
+        ip_address = event.get("ip_address") or "-"
+        success = bool(event.get("success"))
+        rows_data.append(
+            html.Tr(
+                [
+                    html.Td((event.get("created_at") or "")[:19]),
+                    html.Td(event.get("email") or "-"),
+                    html.Td(f"{event.get('first_name') or ''} {event.get('last_name') or ''}".strip() or "-"),
+                    html.Td(
+                        html.Span(
+                            "Yes" if success else "No",
+                            className="signin-status-pill success" if success else "signin-status-pill danger",
+                        )
+                    ),
+                    html.Td(
+                        html.Div(
+                            [
+                                html.Span(ip_address),
+                                html.Button(
+                                    icon("lucide:eye", 14),
+                                    id={"type": "super-admin-ip-geo-open", "ip": ip_address, "index": index},
+                                    n_clicks=0,
+                                    className="ip-eye-button",
+                                    title=f"View geo map for {ip_address}",
+                                    type="button",
+                                    **{"aria-label": f"View geo map for {ip_address}"},
+                                ),
+                            ],
+                            className="ip-cell-action",
+                        )
+                    ),
+                ],
+                className="signin-row-success" if success else "signin-row-failed",
+            )
+        )
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div([html.Strong(str(total)), html.Span("Recent attempts")], className="signin-kpi-card info"),
+                    html.Div([html.Strong(str(successful)), html.Span("Successful")], className="signin-kpi-card success"),
+                    html.Div([html.Strong(str(failed)), html.Span("Failed")], className="signin-kpi-card danger" if failed else "signin-kpi-card"),
+                    html.Div([html.Strong(str(unique_ips)), html.Span("Unique IPs")], className="signin-kpi-card warning"),
+                    html.Div([html.Strong(str(local_private)), html.Span("Local/private")], className="signin-kpi-card local"),
+                    html.Div([html.Strong(str(public_ips)), html.Span("Public IPs")], className="signin-kpi-card blue"),
+                ],
+                className="signin-kpi-grid",
+            ),
+            html.Div(
+                html.Table(
+                    [
+                        html.Thead(html.Tr([html.Th(label) for label in ("When", "Email", "User", "Success", "IP")])),
+                        html.Tbody(rows_data or [html.Tr([html.Td("No login activity yet.", colSpan=5, className="muted")])]),
+                    ],
+                    className="bulk-visibility-table signin-activity-table",
+                ),
+                className="bulk-visibility-table-wrap",
+            ),
+            ],
+        className="signin-activity-panel",
+    )
+
+
 def _select_options(rows: list[dict], label_fields: tuple[str, ...]) -> list[dict]:
     options = []
     for item in rows:
@@ -236,6 +613,16 @@ def _user_report_rows(search: str | None = None) -> list[dict]:
         }
         for user in repository.list_system_users(search=search)
     ]
+
+
+def _selected_user_id_from_grid(selected_id: str | None, selected_rows: list[dict] | None, *, prefer_grid: bool = True) -> str | None:
+    if prefer_grid and selected_rows:
+        return selected_rows[0].get("id")
+    if selected_id:
+        return selected_id
+    if selected_rows:
+        return selected_rows[0].get("id")
+    return None
 
 
 def layout(**_kwargs):
@@ -298,10 +685,12 @@ def layout(**_kwargs):
                         [
                             _section_heading("User Management", "lucide:users-round", tone="blue"),
                             html.P(
-                                "Create any ZCAMS user and assign Super Admin, Company Admin, or Declarant permissions.",
+                                "Create any ZCAMS user and assign Super Admin, Admin Support, Operations, Company Admin, or Declarant permissions.",
                                 className="muted section-lead",
                             ),
                             html.Div(id="super-admin-user-result"),
+                            html.Div(id="super-admin-resend-progress-live", children=_mail_progress()),
+                            html.Div(id="super-admin-resend-progress", children=_mail_progress()),
                             dcc.Dropdown(
                                 id="super-admin-user-picker",
                                 options=_select_options(_user_report_rows(), ("name", "email", "role", "status")),
@@ -324,6 +713,8 @@ def layout(**_kwargs):
                                         id="super-user-role",
                                         options=[
                                             {"label": "Super Admin", "value": auth.ROLE_SUPER_ADMIN},
+                                            {"label": "Admin Support", "value": auth.ROLE_ADMIN},
+                                            {"label": "Operations", "value": auth.ROLE_OPERATIONS},
                                             {"label": "Company Admin", "value": auth.ROLE_COMPANY_ADMIN},
                                             {"label": "Declarant / Agent", "value": auth.ROLE_DECLARANT},
                                         ],
@@ -367,6 +758,12 @@ def layout(**_kwargs):
                                         type="button",
                                     ),
                                     html.Button(
+                                        [icon("lucide:mail-check", 14), "Resend Email"],
+                                        id="super-admin-resend-user-email",
+                                        className="btn-secondary",
+                                        type="button",
+                                    ),
+                                    html.Button(
                                         [icon("lucide:trash-2", 14), "Delete"],
                                         id="super-admin-delete-user",
                                         className="btn-danger",
@@ -395,13 +792,66 @@ def layout(**_kwargs):
                                 _user_report_rows(),
                                 row_class_rules={
                                     "user-super-row": "params.data.role === 'Super Admin'",
+                                    "user-support-admin-row": "params.data.role === 'Admin Support'",
+                                    "user-operations-row": "params.data.role === 'Operations'",
                                     "user-admin-row": "params.data.role === 'Company Admin'",
-                                    "user-declarant-row": "params.data.role === 'Declarant'",
+                                    "user-declarant-row": "params.data.role === 'Declarant / Agent'",
                                 },
                             ),
                         ],
                         className="card section-card stack super-admin-compact-card",
                         id="users",
+                    ),
+                    html.Div(
+                        [
+                            _section_heading("Bulk CFA Auto Registration", "lucide:file-up", tone="green"),
+                            html.P(
+                                "Upload CFA registration files to create or enforce Company Admin accounts only. "
+                                "ZCAMS emails fresh login credentials to every processed CFA admin through the configured mail API.",
+                                className="muted section-lead",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.H3([icon("lucide:upload-cloud", 15), " Company Admin bulk upload"]),
+                                            html.P(
+                                                "Supported files: CSV, XLSX, TXT, DOC/DOCX, and PDF. Required information is a CFA company name and admin email; names, phone, PACRA, TPIN, ZRA licence, and ZAFFA number are used when present.",
+                                                className="muted",
+                                            ),
+                                        ],
+                                        className="stack compact",
+                                    ),
+                                    dcc.Upload(
+                                        id="super-admin-bulk-cfa-upload",
+                                        children=html.Button(
+                                            [icon("lucide:file-up", 14), "Upload CFA Registration File"],
+                                            className="btn-primary",
+                                            type="button",
+                                        ),
+                                        accept=".csv,.txt,.xlsx,.xls,.doc,.docx,.pdf",
+                                        multiple=False,
+                                    ),
+                                ],
+                                className="bulk-registration-panel",
+                            ),
+                            html.Div(id="super-admin-bulk-file-preview", className="bulk-file-preview"),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        html.Div(id="super-admin-bulk-progress-fill", className="bulk-progress-fill"),
+                                        className="bulk-progress-track",
+                                    ),
+                                    html.Div("Waiting for upload.", id="super-admin-bulk-progress-text", className="bulk-progress-text"),
+                                ],
+                                className="bulk-progress-shell",
+                            ),
+                            html.Div(id="super-admin-bulk-cfa-result"),
+                            html.Div(id="super-admin-bulk-visibility", children=_bulk_visibility_panel()),
+                            html.Div(id="super-admin-bulk-ip-geo-modal", className="modal-backdrop is-hidden"),
+                        ],
+                        className="card section-card stack",
+                        id="bulk-registration",
                     ),
                     html.Div(
                         [
@@ -487,6 +937,15 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             _section_heading("Login & Session Monitor", "lucide:monitor-check", tone="blue"),
+                            html.P(
+                                "Review platform sessions, inspect login visibility, and revoke or restore suspicious access.",
+                                className="muted section-lead",
+                            ),
+                            section_label(
+                                "Session Register",
+                                "Lists active, expired, and revoked sessions with user, role, IP address, last seen time, and expiry.",
+                                "lucide:monitor-check",
+                            ),
                             dcc.Dropdown(
                                 id="super-admin-session-picker",
                                 options=_select_options(_session_report_rows(), ("email", "status", "last_seen_at")),
@@ -514,6 +973,12 @@ def layout(**_kwargs):
                             html.Div(
                                 [
                                     html.Button(
+                                        [icon("lucide:eye", 14), "View Login Visibility"],
+                                        id="super-admin-login-visibility-open",
+                                        className="btn-primary",
+                                        type="button",
+                                    ),
+                                    html.Button(
                                         [icon("lucide:shield-off", 14), "Revoke"],
                                         id="super-admin-revoke-session",
                                         className="btn-secondary",
@@ -534,27 +999,14 @@ def layout(**_kwargs):
                                 ],
                                 className="row-actions",
                             ),
-                            html.H3([icon("lucide:history", 14), " Recent sign-in activity"], className="inline-icon-heading"),
-                            dash_table.DataTable(
-                                columns=[
-                                    {"name": "When", "id": "created_at"},
-                                    {"name": "Email", "id": "email"},
-                                    {"name": "User", "id": "user_label"},
-                                    {"name": "Success", "id": "success_label"},
-                                    {"name": "IP", "id": "ip_address"},
-                                ],
-                                data=[
-                                    {
-                                        "created_at": (e.get("created_at") or "")[:19],
-                                        "email": e.get("email") or "-",
-                                        "user_label": f"{e.get('first_name') or ''} {e.get('last_name') or ''}".strip() or "-",
-                                        "success_label": "Yes" if e.get("success") else "No",
-                                        "ip_address": e.get("ip_address") or "-",
-                                    }
-                                    for e in auth.list_login_events(25)
-                                ],
-                                **_cute_data_table_kwargs(8),
+                            html.Div(id="super-admin-login-visibility-modal", className="modal-backdrop is-hidden"),
+                            html.Div(id="super-admin-activity-ip-geo-modal", className="modal-backdrop is-hidden"),
+                            section_label(
+                                "Recent Sign-in Activity",
+                                "Shows the latest successful and failed login attempts so Super Admin can investigate account access.",
+                                "lucide:history",
                             ),
+                            _recent_signin_activity_table(),
                         ],
                         className="card section-card stack",
                         id="sessions",
@@ -562,6 +1014,10 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             _section_heading("Platform Audit Log", "lucide:scroll-text", tone="purple"),
+                            html.P(
+                                "Immutable evidence of platform actions, actors, entities, and affected companies.",
+                                className="muted section-lead",
+                            ),
                             dash_table.DataTable(
                                 columns=[
                                     {"name": "When", "id": "created_at"},
@@ -593,6 +1049,10 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             _section_heading("Cross-Tenant Transaction Monitor", "lucide:git-branch", tone="orange"),
+                            html.P(
+                                "End-to-end shipment status across companies, from BL capture through Z-SAD, invoice, and payment.",
+                                className="muted section-lead",
+                            ),
                             dash_table.DataTable(
                                 columns=[
                                     {"name": "Company", "id": "company_name"},
@@ -626,7 +1086,7 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             _section_heading("Support Command Centre", "lucide:life-buoy", tone="red"),
-                            html.P("Platform-wide support report for every ticket raised in ZCAMS.", className="muted section-lead"),
+                            html.P("Platform-wide support report for every ticket raised in ZCAMS, including module, priority, status, and creator.", className="muted section-lead"),
                             dcc.Input(
                                 id="super-admin-support-search",
                                 placeholder="Search support tickets by company, subject, module, priority, status...",
@@ -657,7 +1117,7 @@ def layout(**_kwargs):
                     html.Div(
                         [
                             _section_heading("Notifications Report", "lucide:bell-ring", tone="purple"),
-                            html.P("Search platform notifications across onboarding, BLs, Z-SADs, invoices, payments, cargo release, contracts, and support.", className="muted section-lead"),
+                            html.P("Search platform notifications across onboarding, BLs, Z-SADs, invoices, payments, cargo release, contracts, and support events.", className="muted section-lead"),
                             dcc.Input(
                                 id="super-admin-notifications-search",
                                 placeholder="Search notifications by event, message, company, entity...",
@@ -684,7 +1144,7 @@ def layout(**_kwargs):
                         [
                             _section_heading("ZCAMS Chat Report", "lucide:bot-message-square", tone="green"),
                             html.P(
-                                "All captured questions and answers from ZCAMS Chat, classified as Good Response, Bad Response, or Neutral Response.",
+                                "All captured ZCAMS Chat questions and answers for quality review, classified as Good Response, Bad Response, or Neutral Response.",
                                 className="muted section-lead",
                             ),
                             html.Div(
@@ -710,13 +1170,27 @@ def layout(**_kwargs):
                             _ag_grid(
                                 "super-admin-chat-grid",
                                 [
-                                    {"headerName": "Created", "field": "created_at", "width": 160},
+                                    {"headerName": "Created", "field": "created_at", "width": 150, "pinned": "left"},
                                     {"headerName": "Company", "field": "company_name", "width": 190},
                                     {"headerName": "User", "field": "user_email", "width": 210},
-                                    {"headerName": "Role", "field": "role", "width": 140},
-                                    {"headerName": "Question", "field": "question", "flex": 2},
-                                    {"headerName": "Answer", "field": "answer", "flex": 3},
-                                    {"headerName": "Mode", "field": "mode", "width": 130},
+                                    {"headerName": "Role", "field": "role", "width": 130},
+                                    {
+                                        "headerName": "Question",
+                                        "field": "question",
+                                        "width": 320,
+                                        "minWidth": 280,
+                                        "tooltipField": "question",
+                                        "cellClass": "chat-question-cell",
+                                    },
+                                    {
+                                        "headerName": "Answer",
+                                        "field": "answer",
+                                        "width": 560,
+                                        "minWidth": 460,
+                                        "tooltipField": "answer",
+                                        "cellClass": "chat-answer-cell",
+                                    },
+                                    {"headerName": "Mode", "field": "mode", "width": 120},
                                     {"headerName": "Quality", "field": "quality", "width": 150},
                                 ],
                                 _chat_report_rows(),
@@ -740,6 +1214,271 @@ def layout(**_kwargs):
 def _require_super_admin(user: dict | None):
     if not user or user.get("role") != auth.ROLE_SUPER_ADMIN:
         raise PermissionError("Super Admin access required.")
+
+
+def _bulk_register_cfas(records: list[dict]) -> dict:
+    created = []
+    resent = []
+    skipped = []
+    failed = []
+    for index, record in enumerate(records, start=1):
+        email = (record.get("email") or "").strip().lower()
+        if not email:
+            failed.append({"row": index, "email": "-", "reason": "Missing email"})
+            continue
+        try:
+            existing = repository.row(
+                """
+                SELECT id, company_id, first_name, last_name, email, role
+                FROM users
+                WHERE lower(email) = lower(?)
+                """,
+                (email,),
+            )
+            if existing:
+                if existing.get("role") != auth.ROLE_COMPANY_ADMIN:
+                    repository.execute(
+                        "UPDATE users SET role = ?, status = 'ACTIVE' WHERE id = ?",
+                        (auth.ROLE_COMPANY_ADMIN, existing["id"]),
+                    )
+                mail_result = repository.email_new_user_registration(existing["id"], source="bulk-cfa")
+                resent.append(
+                    {
+                        "company": record.get("company_name") or email,
+                        "email": email,
+                        "sent": bool(mail_result.get("email_result", {}).get("sent")),
+                        "mode": mail_result.get("email_result", {}).get("mode") or "-",
+                        "reason": mail_result.get("email_result", {}).get("reason") or "",
+                        "role": auth.ROLE_COMPANY_ADMIN,
+                    }
+                )
+                continue
+            onboarding = repository.create_onboarding(
+                {
+                    "company_name": record.get("company_name"),
+                    "pacra_number": record.get("pacra_number"),
+                    "tpin": record.get("tpin"),
+                    "zra_licence": record.get("zra_licence"),
+                    "zaffa_number": record.get("zaffa_number"),
+                    "company_email": record.get("company_email") or email,
+                    "phone": record.get("phone"),
+                    "whatsapp": record.get("whatsapp") or record.get("phone"),
+                    "first_name": record.get("first_name"),
+                    "last_name": record.get("last_name"),
+                    "email": email,
+                    "username": record.get("username") or email,
+                    "password": repository.generate_temp_password(),
+                }
+            )
+            approved = repository.approve_company(onboarding["company_id"], registration_source="bulk-cfa")
+            email_result = approved.get("email", {})
+            created.append(
+                {
+                    "company": approved.get("company", {}).get("name") or record.get("company_name"),
+                    "email": email,
+                    "sent": bool(email_result.get("sent")),
+                    "mode": email_result.get("mode") or "-",
+                    "reason": email_result.get("reason") or "",
+                    "role": auth.ROLE_COMPANY_ADMIN,
+                }
+            )
+        except ValueError as exc:
+            failed.append({"row": index, "email": email, "reason": str(exc)})
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"row": index, "email": email, "reason": str(exc)})
+    return {"created": created, "resent": resent, "skipped": skipped, "failed": failed}
+
+
+def _bulk_registration_notice(result: dict) -> html.Div:
+    created = result.get("created") or []
+    resent = result.get("resent") or []
+    skipped = result.get("skipped") or []
+    failed = result.get("failed") or []
+    sent_count = sum(1 for item in [*created, *resent] if item.get("sent"))
+    table_rows = []
+    for item in created:
+        table_rows.append({**item, "status": "Created", "tone": "success", "note": "CFA approved and Company Admin credentials generated."})
+    for item in resent:
+        table_rows.append({**item, "status": "Credentials reissued", "tone": "info", "note": "Existing account enforced as Company Admin and sent fresh credentials."})
+    for item in skipped:
+        table_rows.append({**item, "company": "-", "status": "Skipped", "tone": "warning", "sent": False, "mode": "-", "note": item.get("reason") or ""})
+    for item in failed:
+        table_rows.append({**item, "company": "-", "status": "Failed", "tone": "danger", "sent": False, "mode": "-", "note": item.get("reason") or ""})
+
+    summary = html.Div(
+        [
+            html.Div([html.Strong(len(created)), html.Span("Created")], className="bulk-summary-card success"),
+            html.Div([html.Strong(len(resent)), html.Span("Credentials reissued")], className="bulk-summary-card info"),
+            html.Div([html.Strong(sent_count), html.Span("Credentials emailed")], className="bulk-summary-card mail"),
+            html.Div([html.Strong(len(failed)), html.Span("Failed")], className="bulk-summary-card danger" if failed else "bulk-summary-card"),
+        ],
+        className="bulk-summary-grid",
+    )
+    table = html.Div(
+        html.Table(
+            [
+                html.Thead(
+                    html.Tr(
+                        [
+                            html.Th("CFA"),
+                            html.Th("Admin Email"),
+                            html.Th("Role"),
+                            html.Th("Result"),
+                            html.Th("Mail"),
+                            html.Th("Notes"),
+                        ]
+                    )
+                ),
+                html.Tbody(
+                    [
+                        html.Tr(
+                            [
+                                html.Td(row.get("company") or "-"),
+                                html.Td(row.get("email") or "-"),
+                                html.Td(html.Span(row.get("role") or auth.ROLE_COMPANY_ADMIN, className="bulk-pill role")),
+                                html.Td(html.Span(row.get("status"), className=f"bulk-pill {row.get('tone')}")),
+                                html.Td(
+                                    html.Span(
+                                        "Sent" if row.get("sent") else "Not confirmed",
+                                        className=f"bulk-pill {'success' if row.get('sent') else 'warning'}",
+                                    )
+                                ),
+                                html.Td(row.get("note") or row.get("reason") or "-"),
+                            ]
+                        )
+                        for row in table_rows
+                    ]
+                ),
+            ],
+            className="bulk-results-table",
+        ),
+        className="bulk-results-table-wrap",
+    )
+    status_class = "notice success bulk-result-card" if not failed else "notice error bulk-result-card"
+    return html.Div([summary, table], className=status_class)
+
+
+def _bulk_visibility_table(headers: list[str], rows_data: list[list]) -> html.Div:
+    return html.Div(
+        html.Table(
+            [
+                html.Thead(html.Tr([html.Th(header) for header in headers])),
+                html.Tbody(
+                    [html.Tr([html.Td(cell) for cell in row_data]) for row_data in rows_data]
+                    if rows_data
+                    else [html.Tr([html.Td("No tracked activity yet.", colSpan=len(headers), className="muted")])]
+                ),
+            ],
+            className="bulk-visibility-table",
+        ),
+        className="bulk-visibility-table-wrap",
+    )
+
+
+def _ip_location_action(ip_address: str | None, button_id) -> html.Div:
+    ip = (ip_address or "-").strip() or "-"
+    return html.Div(
+        [
+            html.Span(ip),
+            html.Button(
+                icon("lucide:eye", 14),
+                id=button_id,
+                n_clicks=0,
+                className="ip-eye-button",
+                title=f"View login location for {ip}",
+                type="button",
+                **{"aria-label": f"View login location for {ip}"},
+            ),
+        ],
+        className="ip-cell-action",
+    )
+
+
+def _bulk_visibility_panel() -> html.Div:
+    data = repository.bulk_registration_visibility()
+    summary = data["summary"]
+    engagement_rows = [
+        [
+            item.get("company_name") or item.get("company_id") or "-",
+            f"{item.get('first_name') or ''} {item.get('last_name') or ''}".strip() or item.get("email") or "-",
+            item.get("email") or "-",
+            str(item.get("link_clicks") or 0),
+            (item.get("last_clicked_at") or "-")[:19],
+            str(item.get("login_attempts") or 0),
+            str(item.get("successful_logins") or 0),
+            str(item.get("failed_logins") or 0),
+            (item.get("last_login_attempt_at") or "-")[:19],
+        ]
+        for item in data["users"]
+    ]
+    click_rows = [
+        [
+            (item.get("created_at") or "-")[:19],
+            item.get("company_name") or "-",
+            item.get("user_email") or item.get("email") or "-",
+            item.get("source") or "-",
+            item.get("ip_address") or "-",
+        ]
+        for item in data["clicks"]
+    ]
+    login_rows = []
+    for index, item in enumerate(data["logins"]):
+        ip_address = item.get("ip_address") or "-"
+        login_rows.append(
+            [
+                (item.get("created_at") or "-")[:19],
+                item.get("company_name") or "-",
+                item.get("user_email") or item.get("email") or "-",
+                "Success" if int(item.get("success") or 0) else "Failed",
+                item.get("failure_reason") or "-",
+                _ip_location_action(
+                    ip_address,
+                    {
+                        "type": "super-admin-bulk-login-location-open",
+                        "ip": ip_address,
+                        "index": index,
+                    },
+                ),
+            ]
+        )
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Div([icon("lucide:eye", 16), html.Strong("Registration Visibility & Login Analytics")], className="bulk-visibility-title"),
+                    html.P(
+                        "Tracks CFA admin credential-link visits and login attempts. New bulk emails include a tracked login link.",
+                        className="muted",
+                    ),
+                ],
+                className="stack compact",
+            ),
+            html.Div(
+                [
+                    html.Div([html.Strong(summary["company_admins"]), html.Span("Company admins")], className="bulk-summary-card info"),
+                    html.Div([html.Strong(summary["clicked_users"]), html.Span("Clicked login link")], className="bulk-summary-card success"),
+                    html.Div([html.Strong(summary["login_attempts"]), html.Span("Login attempts")], className="bulk-summary-card mail"),
+                    html.Div([html.Strong(summary["failed_logins"]), html.Span("Failed logins")], className="bulk-summary-card danger" if summary["failed_logins"] else "bulk-summary-card"),
+                ],
+                className="bulk-summary-grid",
+            ),
+            html.Div(
+                [
+                    html.H4("CFA admin engagement"),
+                    _bulk_visibility_table(
+                        ["Company", "Admin", "Email", "Clicks", "Last click", "Attempts", "Success", "Failed", "Last attempt"],
+                        engagement_rows,
+                    ),
+                    html.H4("Recent tracked link clicks"),
+                    _bulk_visibility_table(["Time", "Company", "Email", "Source", "IP"], click_rows),
+                    html.H4("Recent login attempts"),
+                    _bulk_visibility_table(["Time", "Company", "Email", "Result", "Reason", "Location"], login_rows),
+                ],
+                className="bulk-visibility-sections",
+            ),
+        ],
+        className="bulk-visibility-card",
+    )
 
 
 @callback(
@@ -773,6 +1512,90 @@ def super_admin_company_actions(_approve_clicks, _refresh, selected_company_id, 
 
     company_rows = _company_report_rows()
     return notice, _select_options(company_rows, ("name", "company_email", "status")), company_rows
+
+
+@callback(
+    Output("super-admin-bulk-file-preview", "children"),
+    Output("super-admin-bulk-progress-fill", "style"),
+    Output("super-admin-bulk-progress-text", "children"),
+    Input("super-admin-bulk-cfa-upload", "filename"),
+    Input("super-admin-bulk-cfa-upload", "contents"),
+    prevent_initial_call=False,
+)
+def preview_bulk_cfa_upload(filename, contents):
+    if not filename:
+        return (
+            html.Div([icon("lucide:file-search", 14), html.Span("No bulk registration file selected yet.")]),
+            {"width": "0%"},
+            "Waiting for upload.",
+        )
+    size_label = "File loaded and ready to process." if contents else "Waiting for file content."
+    return (
+        html.Div(
+            [
+                icon("lucide:file-check-2", 15),
+                html.Strong(filename),
+                html.Span(size_label),
+            ]
+        ),
+        {"width": "35%"},
+        f"Received {filename}. Processing will validate records and email Company Admin credentials.",
+    )
+
+
+@callback(
+    Output("super-admin-bulk-visibility", "children"),
+    Input("_pages_location", "pathname"),
+    Input("super-admin-bulk-cfa-upload", "contents"),
+    State("auth-user", "data"),
+    prevent_initial_call=False,
+)
+def refresh_bulk_visibility(pathname, _contents, user):
+    if pathname != "/super-admin":
+        raise PreventUpdate
+    if not user or user.get("role") != auth.ROLE_SUPER_ADMIN:
+        raise PreventUpdate
+    return _bulk_visibility_panel()
+
+
+@callback(
+    Output("super-admin-bulk-cfa-result", "children"),
+    Output("super-admin-bulk-progress-fill", "style", allow_duplicate=True),
+    Output("super-admin-bulk-progress-text", "children", allow_duplicate=True),
+    Output("super-admin-company-picker", "options", allow_duplicate=True),
+    Output("super-admin-companies-table", "rowData", allow_duplicate=True),
+    Output("super-admin-user-picker", "options", allow_duplicate=True),
+    Output("super-admin-users-grid", "rowData", allow_duplicate=True),
+    Input("super-admin-bulk-cfa-upload", "contents"),
+    State("super-admin-bulk-cfa-upload", "filename"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def bulk_auto_register_cfas(contents, filename, user):
+    if not contents:
+        raise PreventUpdate
+    try:
+        _require_super_admin(user)
+        records = parse_bulk_registration_upload(filename or "bulk-cfas.csv", contents)
+        result = _bulk_register_cfas(records)
+        notice = _bulk_registration_notice(result)
+        progress_style = {"width": "100%"}
+        progress_text = f"Completed: {len(result.get('created') or [])} created, {len(result.get('resent') or [])} credentials reissued, {len(result.get('failed') or [])} failed."
+    except Exception as exc:  # noqa: BLE001
+        notice = html.Div(str(exc), className="notice error")
+        progress_style = {"width": "100%", "background": "linear-gradient(90deg, #dc2626, #f97316)"}
+        progress_text = "Bulk registration failed. Review the error message below."
+    company_rows = _company_report_rows()
+    user_rows = _user_report_rows()
+    return (
+        notice,
+        progress_style,
+        progress_text,
+        _select_options(company_rows, ("name", "company_email", "status")),
+        company_rows,
+        _select_options(user_rows, ("name", "email", "role", "status")),
+        user_rows,
+    )
 
 
 @callback(
@@ -879,6 +1702,84 @@ def super_admin_session_actions(_revoke_clicks, _restore_clicks, _delete_clicks,
 
 
 @callback(
+    Output("super-admin-login-visibility-modal", "className"),
+    Output("super-admin-login-visibility-modal", "children"),
+    Input("super-admin-login-visibility-open", "n_clicks"),
+    Input("super-admin-login-visibility-close", "n_clicks"),
+    State("super-admin-session-picker", "value"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def toggle_login_visibility_modal(open_clicks, close_clicks, selected_session_id, user):
+    from dash import ctx
+
+    if ctx.triggered_id == "super-admin-login-visibility-close":
+        return "modal-backdrop is-hidden", no_update
+    if not open_clicks:
+        raise PreventUpdate
+    _require_super_admin(user)
+    return "modal-backdrop login-visibility-backdrop", _login_visibility_modal(selected_session_id)
+
+
+@callback(
+    Output("super-admin-activity-ip-geo-modal", "className"),
+    Output("super-admin-activity-ip-geo-modal", "children"),
+    Input({"type": "super-admin-ip-geo-open", "ip": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "super-admin-ip-geo-close", "ip": ALL}, "n_clicks"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def toggle_activity_ip_geo_modal(_open_clicks, _close_clicks, user):
+    from dash import ctx
+
+    trigger = ctx.triggered_id
+    triggered_value = ctx.triggered[0].get("value") if ctx.triggered else None
+    has_real_click = (
+        any((click or 0) > 0 for click in triggered_value)
+        if isinstance(triggered_value, list)
+        else (triggered_value or 0) > 0
+    )
+    if not has_real_click:
+        raise PreventUpdate
+    if isinstance(trigger, dict) and trigger.get("type") == "super-admin-ip-geo-close":
+        return "modal-backdrop is-hidden", []
+    if not isinstance(trigger, dict) or trigger.get("type") != "super-admin-ip-geo-open":
+        raise PreventUpdate
+    _require_super_admin(user)
+    ip_address = trigger.get("ip")
+    return "modal-backdrop login-visibility-backdrop", _ip_geo_modal(ip_address, "super-admin-ip-geo-close")
+
+
+@callback(
+    Output("super-admin-bulk-ip-geo-modal", "className"),
+    Output("super-admin-bulk-ip-geo-modal", "children"),
+    Input({"type": "super-admin-bulk-login-location-open", "ip": ALL, "index": ALL}, "n_clicks"),
+    Input({"type": "super-admin-bulk-ip-geo-close", "ip": ALL}, "n_clicks"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def toggle_bulk_ip_geo_modal(_open_clicks, _close_clicks, user):
+    from dash import ctx
+
+    trigger = ctx.triggered_id
+    triggered_value = ctx.triggered[0].get("value") if ctx.triggered else None
+    has_real_click = (
+        any((click or 0) > 0 for click in triggered_value)
+        if isinstance(triggered_value, list)
+        else (triggered_value or 0) > 0
+    )
+    if not has_real_click:
+        raise PreventUpdate
+    if isinstance(trigger, dict) and trigger.get("type") == "super-admin-bulk-ip-geo-close":
+        return "modal-backdrop is-hidden", []
+    if not isinstance(trigger, dict) or trigger.get("type") != "super-admin-bulk-login-location-open":
+        raise PreventUpdate
+    _require_super_admin(user)
+    ip_address = trigger.get("ip")
+    return "modal-backdrop login-visibility-backdrop", _ip_geo_modal(ip_address, "super-admin-bulk-ip-geo-close")
+
+
+@callback(
     Output("super-admin-user-result", "children"),
     Output("super-admin-user-picker", "options"),
     Output("super-admin-users-grid", "rowData"),
@@ -963,10 +1864,16 @@ def manage_super_admin_users(
     Output("super-user-phone", "value", allow_duplicate=True),
     Output("super-user-password", "value", allow_duplicate=True),
     Input("super-admin-user-picker", "value"),
+    Input("super-admin-users-grid", "selectedRows"),
     prevent_initial_call=True,
 )
-def load_selected_super_admin_user(selected_user_id):
-    row = repository.get_system_user(selected_user_id) if selected_user_id else {}
+def load_selected_super_admin_user(selected_user_id, selected_rows):
+    selected_id = _selected_user_id_from_grid(
+        selected_user_id,
+        selected_rows,
+        prefer_grid=ctx.triggered_id == "super-admin-users-grid",
+    )
+    row = repository.get_system_user(selected_id) if selected_id else {}
     if not row.get("id"):
         raise PreventUpdate
     return (
@@ -983,13 +1890,16 @@ def load_selected_super_admin_user(selected_user_id):
 
 @callback(
     Output("super-admin-user-result", "children", allow_duplicate=True),
+    Output("super-admin-resend-progress", "children"),
     Output("super-admin-user-picker", "options", allow_duplicate=True),
     Output("super-admin-users-grid", "rowData", allow_duplicate=True),
     Input("super-admin-update-user", "n_clicks"),
     Input("super-admin-suspend-user", "n_clicks"),
     Input("super-admin-activate-user", "n_clicks"),
+    Input("super-admin-resend-user-email", "n_clicks"),
     Input("super-admin-delete-user", "n_clicks"),
     State("super-admin-user-picker", "value"),
+    State("super-admin-users-grid", "selectedRows"),
     State("super-admin-user-search", "value"),
     State("super-user-company", "value"),
     State("super-user-role", "value"),
@@ -1000,13 +1910,22 @@ def load_selected_super_admin_user(selected_user_id):
     State("super-user-phone", "value"),
     State("auth-user", "data"),
     prevent_initial_call=True,
+    running=[
+        (
+            Output("super-admin-resend-progress-live", "children"),
+            _mail_progress("Sending login credentials. Please wait...", 68, "sending"),
+            _mail_progress(),
+        )
+    ],
 )
 def apply_super_admin_user_action(
     _update_clicks,
     _suspend_clicks,
     _activate_clicks,
+    _resend_clicks,
     _delete_clicks,
     selected_id,
+    selected_rows,
     search,
     company_id,
     role,
@@ -1017,13 +1936,13 @@ def apply_super_admin_user_action(
     phone,
     current_user,
 ):
-    from dash import ctx
-
     trigger = ctx.triggered_id
+    selected_id = _selected_user_id_from_grid(selected_id, selected_rows)
     if not selected_id:
         user_rows = _user_report_rows(search)
         return (
             html.Div("Select a user first.", className="notice error"),
+            _mail_progress("Select one or more users before resending.", 0, "error"),
             _select_options(user_rows, ("name", "email", "role", "status")),
             user_rows,
         )
@@ -1043,23 +1962,57 @@ def apply_super_admin_user_action(
                 username=(username or "").strip(),
             )
             notice = html.Div(f"Updated {updated.get('email')}.", className="notice success")
+            progress = _mail_progress()
         elif trigger == "super-admin-suspend-user":
             updated = repository.set_system_user_status(selected_id, "SUSPENDED")
             notice = html.Div(f"Suspended {updated.get('email')}.", className="notice success")
+            progress = _mail_progress()
         elif trigger == "super-admin-activate-user":
             updated = repository.set_system_user_status(selected_id, "ACTIVE")
             notice = html.Div(f"Activated {updated.get('email')}.", className="notice success")
+            progress = _mail_progress()
+        elif trigger == "super-admin-resend-user-email":
+            target_ids = [row.get("id") for row in (selected_rows or []) if row.get("id")] or [selected_id]
+            sent = []
+            failed = []
+            for target_id in target_ids:
+                delivery = repository.resend_user_credentials(
+                    target_id,
+                    source="super-admin-resend",
+                    actor_role=auth.ROLE_SUPER_ADMIN,
+                )
+                email_result = delivery.get("email_result") or {}
+                user = delivery.get("user") or {}
+                if email_result.get("sent"):
+                    sent.append(user.get("email") or target_id)
+                else:
+                    failed.append(f"{user.get('email') or target_id}: temporary password {delivery.get('temp_password')}")
+            if failed:
+                notice = html.Div(
+                    [
+                        html.Strong(f"Credentials resent to {len(sent)} user(s). "),
+                        html.Span("Some emails were not confirmed: "),
+                        html.Span("; ".join(failed)),
+                    ],
+                    className="notice error",
+                )
+                progress = _mail_progress(f"Resend completed with {len(failed)} email issue(s).", 100, "error")
+            else:
+                notice = html.Div(f"Credentials resent to {len(sent)} user(s). Each user must set a new password on first login.", className="notice success")
+                progress = _mail_progress(f"Mail sent to {len(sent)} user(s).", 100, "success")
         elif trigger == "super-admin-delete-user":
             repository.delete_system_user(selected_id)
             notice = html.Div("User deleted.", className="notice success")
+            progress = _mail_progress()
         else:
             raise PreventUpdate
     except PreventUpdate:
         raise
     except Exception as exc:  # noqa: BLE001
         notice = html.Div(str(exc), className="notice error")
+        progress = _mail_progress("Resend failed before mail could be sent.", 100, "error")
     user_rows = _user_report_rows(search)
-    return notice, _select_options(user_rows, ("name", "email", "role", "status")), user_rows
+    return notice, progress, _select_options(user_rows, ("name", "email", "role", "status")), user_rows
 
 
 @callback(

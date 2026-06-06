@@ -264,7 +264,7 @@ sequenceDiagram
 
 Same diagram, but a single `AgentOrchestrator` replaces every human click after
 the upload. The CFA submits **one form** with three inputs: BL file,
-settlement mode (`SERVICE_FEE_ONLY` or `FULL_SETTLEMENT`), and the importer
+settlement mode (`FULL_SETTLEMENT`), and the importer
 email. Everything else is decided by deterministic business rules plus a small
 LLM-assisted extraction step.
 

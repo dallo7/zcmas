@@ -12,7 +12,9 @@ def test_layout_uses_explicit_page_slot():
     assert "page_container" not in layout_repr
     assert "zcams-modal-layer" in layout_repr
     assert "invoice-request-modal" in layout_repr
-    assert "invoice-pick-service" in layout_repr
+    assert "invoice-pick-full" in layout_repr
+    removed_invoice_picker_id = "invoice-pick-" + "service"
+    assert removed_invoice_picker_id not in layout_repr
 
 
 def test_app_shell_places_sidebar_before_main_content():
@@ -97,6 +99,44 @@ def test_render_page_admin_for_company_admin():
     assert "Operational Oversight" in rendered
 
 
+def test_render_page_admin_support_for_admin_role():
+    import app as zapp
+
+    from dash import no_update
+
+    user = {"role": "ADMIN", "email": "support@zcams.co.zm"}
+    with patch.object(zapp, "_callback_trigger", return_value="auth-user"):
+        children, pathname = zapp.render_page("/admin-support", user)
+    assert pathname is no_update
+    rendered = str(children)
+    assert "Admin Support Centre" in rendered
+    assert "Support Queue" in rendered
+
+
+def test_render_page_operations_for_operations_role():
+    import app as zapp
+
+    from dash import no_update
+
+    user = {"role": "OPERATIONS", "email": "operations@zcams.co.zm"}
+    with patch.object(zapp, "_callback_trigger", return_value="auth-user"):
+        children, pathname = zapp.render_page("/operations", user)
+    assert pathname is no_update
+    rendered = str(children)
+    assert "Operations Settlement Dashboard" in rendered
+
+
+def test_render_page_blocks_admin_support_for_company_admin():
+    import app as zapp
+
+    from services.repository import DEMO_COMPANY_ID
+
+    user = {"role": "COMPANY_ADMIN", "email": "admin@demo.test", "company_id": DEMO_COMPANY_ID}
+    children, pathname = zapp.render_page("/admin-support", user)
+    assert pathname == "/dashboard"
+    assert children is not None
+
+
 def test_render_page_forces_password_change_before_workspace():
     import app as zapp
 
@@ -154,6 +194,30 @@ def test_render_page_redirects_authenticated_login_to_role_home():
     assert pathname == "/super-admin"
 
 
+def test_render_page_redirects_admin_login_to_support_home():
+    import app as zapp
+
+    from dash import no_update
+
+    user = {"role": "ADMIN", "email": "support@zcams.co.zm"}
+    with patch.object(zapp, "_callback_trigger", return_value="auth-user"):
+        children, pathname = zapp.render_page("/login", user)
+    assert children is no_update
+    assert pathname == "/admin-support"
+
+
+def test_render_page_redirects_operations_login_to_operations_home():
+    import app as zapp
+
+    from dash import no_update
+
+    user = {"role": "OPERATIONS", "email": "operations@zcams.co.zm"}
+    with patch.object(zapp, "_callback_trigger", return_value="auth-user"):
+        children, pathname = zapp.render_page("/login", user)
+    assert children is no_update
+    assert pathname == "/operations"
+
+
 def test_render_page_logout_clears_session_and_shows_login():
     import app as zapp
 
@@ -179,14 +243,12 @@ def test_invoice_modal_opens_from_store_payload():
         mock_ctx.triggered = [{"prop_id": "invoice-request", "value": 1}]
         mock_ctx.triggered_id = {"type": "invoice-request", "id": rid, "variant": "choose"}
         choose = reviewed_bl.toggle_invoice_modal([1], None, None, None, None, None)[:19]
-        mock_ctx.triggered_id = {"type": "invoice-request", "id": rid, "variant": "service"}
-        service = reviewed_bl.toggle_invoice_modal([1], None, None, None, None, None)[:19]
         mock_ctx.triggered_id = {"type": "invoice-request", "id": rid, "variant": "full"}
         full = reviewed_bl.toggle_invoice_modal([1], None, None, None, None, None)[:19]
 
     assert choose[1] == "modal-backdrop"
-    assert choose[3] == "choose"
-    assert service[3] == "details"
-    assert service[7] == "SERVICE_FEE_ONLY"
+    assert choose[3] == "details"
+    assert choose[7] == "FULL_SETTLEMENT"
+    assert full[3] == "details"
     assert full[7] == "FULL_SETTLEMENT"
     assert choose[0]["id"] == rid

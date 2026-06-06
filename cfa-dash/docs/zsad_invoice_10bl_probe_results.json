@@ -1,0 +1,338 @@
+{
+  "started_at": "2026-05-31 07:02:58",
+  "sample_size": 10,
+  "login": {
+    "valid_user": true,
+    "role": "COMPANY_ADMIN",
+    "company_id": "company-zaffa-demo",
+    "invalid_user": false,
+    "valid_login_ms": 13.93,
+    "invalid_login_ms": 13.37
+  },
+  "transactions": [
+    {
+      "case": 1,
+      "bl_number": "PROBE10BL001",
+      "route": "Import",
+      "transport": "Sea",
+      "category": "20FT_CONTAINER",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L001-5P83ROYC2T61131",
+      "invoice_number": "INV-20260531070258-80F38E",
+      "capitalpay_ref": "CPAY10BL001",
+      "total_usd": 35.0,
+      "payable_usd": 35.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 135.82,
+        "issue_zsad_ms": 60.84,
+        "generate_invoice_ms": 126.26,
+        "align_ref_ms": 100.67,
+        "pdf_regen_ms": 81.97,
+        "whatsapp_link_ms": 1.66
+      }
+    },
+    {
+      "case": 2,
+      "bl_number": "PROBE10BL002",
+      "route": "Import",
+      "transport": "Sea",
+      "category": "20FT_CONTAINER",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L002-G5411J76P3U9SH6",
+      "invoice_number": "INV-20260531070258-31EC47",
+      "capitalpay_ref": "CPAY10BL002",
+      "total_usd": 418.0,
+      "payable_usd": 418.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 45.49,
+        "issue_zsad_ms": 53.03,
+        "generate_invoice_ms": 139.38,
+        "align_ref_ms": 99.81,
+        "pdf_regen_ms": 83.9,
+        "whatsapp_link_ms": 1.19
+      }
+    },
+    {
+      "case": 3,
+      "bl_number": "PROBE10BL003",
+      "route": "Import",
+      "transport": "Sea",
+      "category": "LOOSE_LCL",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L003-8H936A3R8GDX514",
+      "invoice_number": "INV-20260531070259-2CFAE2",
+      "capitalpay_ref": "CPAY10BL003",
+      "total_usd": 21.0,
+      "payable_usd": 21.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 32.6,
+        "issue_zsad_ms": 39.02,
+        "generate_invoice_ms": 154.36,
+        "align_ref_ms": 132.06,
+        "pdf_regen_ms": 87.33,
+        "whatsapp_link_ms": 1.18
+      }
+    },
+    {
+      "case": 4,
+      "bl_number": "PROBE10BL004",
+      "route": "Import",
+      "transport": "Sea",
+      "category": "40FT_CONTAINER",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L004-LYN827H4H2R4854",
+      "invoice_number": "INV-20260531070259-544866",
+      "capitalpay_ref": "CPAY10BL004",
+      "total_usd": 836.0,
+      "payable_usd": 836.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 58.81,
+        "issue_zsad_ms": 63.5,
+        "generate_invoice_ms": 130.83,
+        "align_ref_ms": 102.19,
+        "pdf_regen_ms": 105.77,
+        "whatsapp_link_ms": 1.25
+      }
+    },
+    {
+      "case": 5,
+      "bl_number": "PROBE10BL005",
+      "route": "Import",
+      "transport": "Road",
+      "category": "MOTOR_VEHICLE",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L005-V4MA6371B3N51W7",
+      "invoice_number": "INV-20260531070259-533B0C",
+      "capitalpay_ref": "CPAY10BL005",
+      "total_usd": 31.0,
+      "payable_usd": 31.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 39.05,
+        "issue_zsad_ms": 54.74,
+        "generate_invoice_ms": 125.54,
+        "align_ref_ms": 91.34,
+        "pdf_regen_ms": 80.17,
+        "whatsapp_link_ms": 1.0
+      }
+    },
+    {
+      "case": 6,
+      "bl_number": "PROBE10BL006",
+      "route": "Import",
+      "transport": "Road",
+      "category": "HEAVY_EQUIPMENT",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L006-39P4879B3XE3T4P",
+      "invoice_number": "INV-20260531070300-C12B3E",
+      "capitalpay_ref": "CPAY10BL006",
+      "total_usd": 348.0,
+      "payable_usd": 348.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 28.97,
+        "issue_zsad_ms": 55.16,
+        "generate_invoice_ms": 115.77,
+        "align_ref_ms": 101.84,
+        "pdf_regen_ms": 87.83,
+        "whatsapp_link_ms": 1.33
+      }
+    },
+    {
+      "case": 7,
+      "bl_number": "PROBE10BL007",
+      "route": "Import",
+      "transport": "Sea",
+      "category": "DRY_BULK",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L007-9A4RA556C5CD549",
+      "invoice_number": "INV-20260531070300-ECDC43",
+      "capitalpay_ref": "CPAY10BL007",
+      "total_usd": 6.0,
+      "payable_usd": 6.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 27.94,
+        "issue_zsad_ms": 60.96,
+        "generate_invoice_ms": 123.03,
+        "align_ref_ms": 121.95,
+        "pdf_regen_ms": 87.69,
+        "whatsapp_link_ms": 1.13
+      }
+    },
+    {
+      "case": 8,
+      "bl_number": "PROBE10BL008",
+      "route": "Transit",
+      "transport": "Sea",
+      "category": "BULK_LIQUID",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L008-1552XOT946Z5ZO1",
+      "invoice_number": "INV-20260531070301-743A63",
+      "capitalpay_ref": "CPAY10BL008",
+      "total_usd": 46.0,
+      "payable_usd": 46.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 50.65,
+        "issue_zsad_ms": 55.71,
+        "generate_invoice_ms": 127.55,
+        "align_ref_ms": 109.3,
+        "pdf_regen_ms": 102.54,
+        "whatsapp_link_ms": 1.0
+      }
+    },
+    {
+      "case": 9,
+      "bl_number": "PROBE10BL009",
+      "route": "Transit",
+      "transport": "Road",
+      "category": "LIVE_ANIMAL",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L009-9UE3P913Z6TR377",
+      "invoice_number": "INV-20260531070301-E49836",
+      "capitalpay_ref": "CPAY10BL009",
+      "total_usd": 21.0,
+      "payable_usd": 21.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 28.03,
+        "issue_zsad_ms": 41.24,
+        "generate_invoice_ms": 137.29,
+        "align_ref_ms": 101.87,
+        "pdf_regen_ms": 94.76,
+        "whatsapp_link_ms": 1.13
+      }
+    },
+    {
+      "case": 10,
+      "bl_number": "PROBE10BL010",
+      "route": "Export",
+      "transport": "Air",
+      "category": "GENERAL_CARGO",
+      "invoice_type": "FULL_SETTLEMENT",
+      "z_sad_number": "Z-SAD-L010-6HIO592246U44WF",
+      "invoice_number": "INV-20260531070302-BE0595",
+      "capitalpay_ref": "CPAY10BL010",
+      "total_usd": 126.0,
+      "payable_usd": 126.0,
+      "pdf_exists": true,
+      "whatsapp_link": true,
+      "status": "AWAITING_PAYMENT",
+      "metrics_ms": {
+        "save_bl_ms": 38.43,
+        "issue_zsad_ms": 57.45,
+        "generate_invoice_ms": 158.88,
+        "align_ref_ms": 97.79,
+        "pdf_regen_ms": 82.58,
+        "whatsapp_link_ms": 1.18
+      }
+    }
+  ],
+  "negative_tests": [
+    {
+      "name": "Duplicate BL number",
+      "type": "VALIDATION / CONFLICT",
+      "outcome": "EXPECTED_ERROR",
+      "message": "Duplicate BL number: PROBE10BL001. Z-SAD Z-SAD-L001-5P83ROYC2T61131 was already generated for your company. Detach the Z-SAD from the previous record to cancel it and re-use this BL number.",
+      "duration_ms": 1.02,
+      "meaning": "The platform must prevent a second active journey for a BL that already has a Z-SAD."
+    },
+    {
+      "name": "Unknown reviewed BL invoice",
+      "type": "NOT FOUND",
+      "outcome": "EXPECTED_ERROR",
+      "message": "Unknown reviewed BL id: reviewed-does-not-exist",
+      "duration_ms": 0.85,
+      "meaning": "Invoice generation must not proceed for a non-existent reviewed BL."
+    },
+    {
+      "name": "Full settlement below GN 83 minimum",
+      "type": "BUSINESS RULE",
+      "outcome": "EXPECTED_ERROR",
+      "message": "Full Settlement amount cannot be below USD 150.00.",
+      "duration_ms": 2.26,
+      "meaning": "Operators cannot undercharge the statutory minimum."
+    },
+    {
+      "name": "CapitalPay real mode missing credentials",
+      "type": "CONFIGURATION",
+      "outcome": "EXPECTED_ERROR",
+      "message": "CapitalPay key and secret are required when CAPITALPAY_MODE=real.",
+      "duration_ms": 0.02,
+      "meaning": "Production must fail closed instead of issuing mock references."
+    },
+    {
+      "name": "CapitalPay checkout endpoint unreachable",
+      "type": "NOT REACHABLE / TIMEOUT",
+      "outcome": "EXPECTED_ERROR",
+      "message": "Simulated checkout timeout / endpoint not reachable",
+      "duration_ms": 1.13,
+      "meaning": "Pay Now and PDF download preparation should surface a dependency failure."
+    }
+  ],
+  "summary": {
+    "save_bl_ms": {
+      "min": 27.94,
+      "avg": 48.58,
+      "p95": 135.82,
+      "max": 135.82
+    },
+    "issue_zsad_ms": {
+      "min": 39.02,
+      "avg": 54.16,
+      "p95": 63.5,
+      "max": 63.5
+    },
+    "generate_invoice_ms": {
+      "min": 115.77,
+      "avg": 133.89,
+      "p95": 158.88,
+      "max": 158.88
+    },
+    "align_ref_ms": {
+      "min": 91.34,
+      "avg": 105.88,
+      "p95": 132.06,
+      "max": 132.06
+    },
+    "pdf_regen_ms": {
+      "min": 80.17,
+      "avg": 89.45,
+      "p95": 105.77,
+      "max": 105.77
+    },
+    "whatsapp_link_ms": {
+      "min": 1.0,
+      "avg": 1.2,
+      "p95": 1.66,
+      "max": 1.66
+    },
+    "passed_transactions": 10,
+    "failed_transactions": 0,
+    "negative_expected_errors": 5
+  },
+  "cleanup": "probe rows and generated PDFs removed after metrics were collected"
+}

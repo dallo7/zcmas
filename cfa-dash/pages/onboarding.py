@@ -1,6 +1,7 @@
 from dash import Input, Output, State, callback, dcc, html, register_page
 
 from components.icons import icon
+from components.layout import public_nav
 from services import repository
 
 
@@ -94,27 +95,7 @@ def layout(**_kwargs):
     return html.Div(
         [
             dcc.Location(id="onboarding-redirect"),
-            html.Nav(
-                [
-                    dcc.Link(
-                        html.Img(
-                            src="/assets/zcams-logo.png",
-                            alt="ZCAMS — CFA Onboarding",
-                            className="public-logo-img",
-                        ),
-                        href="/login",
-                        className="public-logo",
-                    ),
-                    html.Div(
-                        [
-                            dcc.Link("Sign In", href="/login", className="btn-public-outline"),
-                            dcc.Link("Dashboard", href="/dashboard", className="btn-public-solid"),
-                        ],
-                        className="public-nav-actions",
-                    ),
-                ],
-                className="public-nav",
-            ),
+            public_nav(),
             html.Main(
                 [
                     html.Div(
@@ -188,7 +169,10 @@ def layout(**_kwargs):
                             html.Div(
                                 [
                                     html.H2("4. KYC Documents"),
-                                    html.P("Upload document names for the POC. Actual file storage can be added when production storage is selected.", className="muted"),
+                                    html.P(
+                                        "Provide the compliance documents ZAFFA needs to review the CFA registration and approval readiness.",
+                                        className="muted section-lead",
+                                    ),
                                 ],
                                 className="onboarding-section-heading",
                             ),
@@ -201,7 +185,10 @@ def layout(**_kwargs):
                             html.Div(
                                 [
                                     html.H2("5. Review and Submit"),
-                                    html.P("By submitting, you confirm your CFA has valid ZAFFA membership and a current ZRA Customs Agent Licence.", className="muted"),
+                                    html.P(
+                                        "Confirm the application is accurate before sending it to Super Admin for onboarding review.",
+                                        className="muted section-lead",
+                                    ),
                                 ],
                                 className="onboarding-section-heading",
                             ),

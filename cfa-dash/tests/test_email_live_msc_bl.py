@@ -74,7 +74,7 @@ def bl_invoice():
     reviewed_id = bl["reviewed_bl"]["id"]
     invoice = generate_invoice(
         reviewed_id,
-        "SERVICE_FEE_ONLY",
+        "FULL_SETTLEMENT",
         contact_phone=CLIENT_PHONE,
         contact_email=CLIENT_EMAIL,
     )

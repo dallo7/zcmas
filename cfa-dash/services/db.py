@@ -28,11 +28,90 @@ def init_db() -> None:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         _migrate_users(conn)
         _migrate_invoices(conn)
+        _migrate_bl_extraction_fields(conn)
         _migrate_bl_cancel(conn)
         _migrate_companies(conn)
         _migrate_contracts(conn)
         _migrate_auth(conn)
         _migrate_chat_events(conn)
+        _migrate_registration_link_events(conn)
+        _migrate_settlement_dashboard(conn)
+
+
+def _migrate_settlement_dashboard(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS settlement_runs (
+          id TEXT PRIMARY KEY,
+          run_key TEXT NOT NULL UNIQUE,
+          run_number TEXT NOT NULL,
+          prepared_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          total_amount_tzs REAL NOT NULL DEFAULT 0,
+          cfa_count INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'PREPARED'
+        );
+
+        CREATE TABLE IF NOT EXISTS settlement_run_items (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          company_id TEXT,
+          cfa_company_name TEXT NOT NULL,
+          cfa_licence_number TEXT,
+          bank_name TEXT,
+          bank_branch TEXT,
+          bank_account_number TEXT,
+          amount_tzs REAL NOT NULL DEFAULT 0,
+          declarations_count INTEGER NOT NULL DEFAULT 0,
+          payment_status TEXT NOT NULL DEFAULT 'Pending',
+          capitalpay_reference TEXT,
+          flag_reason TEXT,
+          last_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(run_id, company_id),
+          FOREIGN KEY(run_id) REFERENCES settlement_runs(id) ON DELETE CASCADE,
+          FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_settlement_run_items_run ON settlement_run_items(run_id);
+        CREATE INDEX IF NOT EXISTS idx_settlement_run_items_status ON settlement_run_items(payment_status);
+
+        CREATE TABLE IF NOT EXISTS settlement_download_logs (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          user_id TEXT,
+          user_email TEXT,
+          file_name TEXT NOT NULL,
+          cfa_count INTEGER NOT NULL DEFAULT 0,
+          total_amount_tzs REAL NOT NULL DEFAULT 0,
+          downloaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(run_id) REFERENCES settlement_runs(id) ON DELETE CASCADE,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_settlement_download_logs_run ON settlement_download_logs(run_id);
+        CREATE INDEX IF NOT EXISTS idx_settlement_download_logs_downloaded ON settlement_download_logs(downloaded_at DESC);
+        """
+    )
+    conn.commit()
+
+
+def _migrate_registration_link_events(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS registration_link_events (
+          id TEXT PRIMARY KEY,
+          user_id TEXT,
+          email TEXT,
+          source TEXT,
+          ip_address TEXT,
+          user_agent TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_registration_link_events_created ON registration_link_events(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_registration_link_events_user ON registration_link_events(user_id);
+        """
+    )
+    conn.commit()
 
 
 def _migrate_chat_events(conn: sqlite3.Connection) -> None:
@@ -114,6 +193,25 @@ def _migrate_invoices(conn: sqlite3.Connection) -> None:
         "contact_email": "ALTER TABLE invoices ADD COLUMN contact_email TEXT",
         "payable_amount": "ALTER TABLE invoices ADD COLUMN payable_amount REAL",
         "pdf_path": "ALTER TABLE invoices ADD COLUMN pdf_path TEXT",
+    }
+    for column, statement in migrations.items():
+        if column not in existing:
+            conn.execute(statement)
+    conn.commit()
+
+
+def _migrate_bl_extraction_fields(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(bills_of_lading)").fetchall()}
+    migrations = {
+        "bl_type": "ALTER TABLE bills_of_lading ADD COLUMN bl_type TEXT",
+        "currency": "ALTER TABLE bills_of_lading ADD COLUMN currency TEXT",
+        "agent_license": "ALTER TABLE bills_of_lading ADD COLUMN agent_license TEXT",
+        "company_name": "ALTER TABLE bills_of_lading ADD COLUMN company_name TEXT",
+        "consignor_tin": "ALTER TABLE bills_of_lading ADD COLUMN consignor_tin TEXT",
+        "declarant_number": "ALTER TABLE bills_of_lading ADD COLUMN declarant_number TEXT",
+        "consignment_value": "ALTER TABLE bills_of_lading ADD COLUMN consignment_value REAL",
+        "gn83_unit": "ALTER TABLE bills_of_lading ADD COLUMN gn83_unit TEXT",
+        "gn83_fee_usd": "ALTER TABLE bills_of_lading ADD COLUMN gn83_fee_usd REAL",
     }
     for column, statement in migrations.items():
         if column not in existing:

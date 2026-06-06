@@ -24,9 +24,20 @@ DECLARANT_NAV = [
     ("/contracts", "lucide:file-signature", "Contracts"),
 ]
 
+ADMIN_SUPPORT_NAV = [
+    ("/admin-support", "lucide:life-buoy", "Admin Support"),
+    ("/notifications", "lucide:bell", "Notifications"),
+    ("/support", "lucide:headphones", "Support Tickets"),
+]
+
+OPERATIONS_NAV = [
+    ("/operations", "lucide:landmark", "Operations"),
+]
+
 SUPER_ADMIN_NAV = [
     ("/super-admin", "lucide:shield-check", "Platform Control"),
     ("/super-admin#users", "lucide:users-round", "User Management"),
+    ("/super-admin#bulk-registration", "lucide:file-up", "Bulk Registration"),
     ("/super-admin#companies", "lucide:building", "CFA Registry"),
     ("/super-admin#sessions", "lucide:monitor", "Sessions & Logins"),
     ("/super-admin#audit", "lucide:scroll-text", "Audit Log"),
@@ -39,6 +50,12 @@ ADMIN_HUB_NAV = [
     ("/admin#tools", "lucide:wrench", "Support Tools"),
 ]
 
+SUPER_ADMIN_ASSIGNED_ROLE_NAV = [
+    ("/operations", "lucide:landmark", "Operations"),
+    ("/admin-support", "lucide:life-buoy", "Admin Support"),
+    *ADMIN_HUB_NAV,
+]
+
 SECONDARY_NAV = [
     ("/notifications", "lucide:bell", "Notifications"),
     ("/support", "lucide:headphones", "Support"),
@@ -47,6 +64,11 @@ SECONDARY_NAV = [
 ]
 
 SUPER_ADMIN_TOOLS_NAV = [
+    ("/chat", "lucide:message-circle", "ZCAMS Chat"),
+    ("/gn83", "lucide:file-star", "GN 83 Schedule"),
+]
+
+ADMIN_SUPPORT_TOOLS_NAV = [
     ("/chat", "lucide:message-circle", "ZCAMS Chat"),
     ("/gn83", "lucide:file-star", "GN 83 Schedule"),
 ]
@@ -74,25 +96,31 @@ def display_user(user: dict | None = None) -> dict:
     role_key = (user.get("role") or "COMPANY_ADMIN").upper()
     if role_key == "DECLARANT":
         role = "Declarant / Agent"
+    elif role_key == "ADMIN":
+        role = "Admin Support"
+    elif role_key == "OPERATIONS":
+        role = "Operations"
     else:
         role = role_key.replace("_", " ").title()
     initials = f"{first[:1]}{last[:1]}".upper()
     is_super_admin = role_key == "SUPER_ADMIN"
+    is_admin_support = role_key == "ADMIN"
+    is_operations = role_key == "OPERATIONS"
     company_name = user.get("company_name")
     if not company_name and user.get("company_id"):
         from services import repository
 
         company_name = (repository.get_company(user["company_id"]) or {}).get("name")
-    tenant_name = "ZCAMS Administration" if is_super_admin else (company_name or TENANT["name"])
+    tenant_name = "ZCAMS Administration" if is_super_admin or is_admin_support or is_operations else (company_name or TENANT["name"])
     return {
         "initials": initials,
         "name": f"{first} {last}",
         "email": user.get("email") or DEMO_USER["email"],
-        "company": "ZCAMS Super Admin Console" if is_super_admin else (company_name or TENANT["name"]),
+        "company": "ZCAMS Super Admin Console" if is_super_admin else ("ZCAMS Admin Support Console" if is_admin_support else ("ZCAMS Operations Console" if is_operations else (company_name or TENANT["name"]))),
         "role": role,
         "tenant_name": tenant_name,
-        "tenant_role": "Platform Oversight" if is_super_admin else TENANT["role"],
-        "tenant_code": "SA" if is_super_admin else TENANT["code"],
+        "tenant_role": "Platform Oversight" if is_super_admin else ("Support Operations" if is_admin_support else ("Settlement Operations" if is_operations else TENANT["role"])),
+        "tenant_code": "SA" if is_super_admin else ("AS" if is_admin_support else ("OP" if is_operations else TENANT["code"])),
     }
 
 
@@ -109,10 +137,28 @@ def nav_items_for_user(user: dict | None) -> tuple[list, list, list]:
             ("/checkout", "lucide:credit-card", "Check-out"),
             ("/contracts", "lucide:file-signature", "Contracts"),
             ("/company-profile", "lucide:building-2", "Company Profile"),
-        ], ADMIN_HUB_NAV, SUPER_ADMIN_TOOLS_NAV
+        ], SUPER_ADMIN_ASSIGNED_ROLE_NAV, SUPER_ADMIN_TOOLS_NAV
+    if role == "ADMIN":
+        return ADMIN_SUPPORT_NAV, [], ADMIN_SUPPORT_TOOLS_NAV
+    if role == "OPERATIONS":
+        return OPERATIONS_NAV, [], []
     if role == "DECLARANT":
         return DECLARANT_NAV, [], SECONDARY_NAV
     return PRIMARY_NAV, ADMIN_HUB_NAV, SECONDARY_NAV
+
+
+def section_label(title: str, description: str, icon_name: str | None = None, *, eyebrow: str | None = None):
+    """Reusable compact label for forms, grids, and report sections."""
+    heading = html.Div(
+        [
+            html.P(eyebrow, className="section-eyebrow") if eyebrow else None,
+            html.H3(title),
+            html.P(description, className="muted section-label-copy"),
+        ],
+        className="section-label-text",
+    )
+    children = [html.Div(icon(icon_name, 15), className="section-label-icon"), heading] if icon_name else [heading]
+    return html.Div(children, className="section-label")
 
 
 PAGE_TUTORIALS = {
@@ -127,12 +173,56 @@ PAGE_TUTORIALS = {
         ],
         "outcome": "You know what needs attention and can continue shipment processing without admin-only approval actions.",
     },
+    "Platform Control Centre": {
+        "objective": "Give Super Admins a platform-wide control room for roles, CFA onboarding, sessions, audit evidence, and cross-tenant support.",
+        "steps": [
+            "Use User Management to create or maintain all five ZCAMS roles: Super Admin, Admin Support, Operations, Company Admin, and Declarant.",
+            "Review Bulk CFA Auto Registration and CFA Registry when new companies need onboarding or approval oversight.",
+            "Monitor Sessions & Logins to identify suspicious activity, failed access attempts, and active platform sessions.",
+            "Use Audit Log and Transactions to trace what changed across companies, BLs, Z-SADs, invoices, and payments.",
+            "Escalate unresolved support, notification, or chat quality issues to the correct assigned role.",
+        ],
+        "outcome": "Super Admin retains platform control without mixing assigned operational roles into day-to-day CFA support work.",
+    },
+    "Admin Support Centre": {
+        "objective": "Support CFA Admins and Declarants across companies without granting Super Admin platform-control powers.",
+        "steps": [
+            "Start with Support Queue to search tickets, select a row, and update the ticket status.",
+            "Use User Access Diagnostic to inspect a Company Admin or Declarant account, recent login attempts, status, and company.",
+            "Create or update only Company Admin and Declarant users in the management table.",
+            "Use Shipment Resolver to trace a BL, Z-SAD, invoice, or CapitalPay reference during a support call.",
+            "Review Company Readiness and Activity Monitor to find missing profile data, open tickets, login failures, and audit evidence.",
+        ],
+        "outcome": "Admin Support can resolve user and workflow support issues while staying inside the Company Admin and Declarant boundary.",
+    },
+    "Operations Settlement Dashboard": {
+        "objective": "Prepare and review settlement analytics for payment-backed CFA invoice runs before exporting the bank XML report.",
+        "steps": [
+            "Refresh Analytics to compile the latest settlement run from invoices, payments, CFA details, and CapitalPay references.",
+            "Review KPI cards for total settlement value, CFA count, current run number, last run time, and flags.",
+            "Search and filter the settlement table by CFA, payment status, bank details, licence, or CapitalPay reference.",
+            "Resolve any flagged rows before confirming that Operations reviewed the settlement list.",
+            "Confirm review, download the settlement report, and use the audit log to verify the export was recorded.",
+        ],
+        "outcome": "Operations has a reviewed, traceable settlement run and a logged XML export for downstream payment processing.",
+    },
+    "Company Administration": {
+        "objective": "Let the CFA Company Admin manage company-scoped Declarant users and monitor the tenant workflow.",
+        "steps": [
+            "Review the summary cards for compliance, active users, pending BLs, invoices, releases, tickets, contracts, and documents.",
+            "Use Access Control to create, update, suspend, activate, or delete Declarant users only.",
+            "Use Operational Oversight to track company BLs, reviewed BLs, Z-SADs, invoices, and payments.",
+            "Review Compliance, Contracts & Alerts to identify missing profile details, unsigned contracts, notifications, support tickets, and audit events.",
+            "Use Support Tools for company-scoped shipment, payment, user, document, and GN 83 lookup support.",
+        ],
+        "outcome": "The Company Admin can support Declarants inside their own CFA without creating other Company Admins or platform roles.",
+    },
     "Agentic Mode": {
         "objective": "Let ZCAMS guide a BL through extraction, validation, Z-SAD, invoice, and client sharing steps.",
         "steps": [
             "Open Agentic Mode from the Dashboard header.",
             "Upload the BL and wait for the extraction progress to complete.",
-            "Confirm the five critical values: BL number, consignee TIN, gross weight, cargo/container count, and Service Fee or Full Settlement.",
+            "Confirm the five critical values: BL number, consignee TIN, gross weight, cargo/container count, and Agency Charge or Full Settlement.",
             "Enter the client email and phone number before running the workflow.",
             "Run Agentic Workflow and watch the milestones until the invoice is generated and shared.",
         ],
@@ -149,6 +239,17 @@ PAGE_TUTORIALS = {
         ],
         "outcome": "The BL is saved and ready for review, Z-SAD generation, and invoicing.",
     },
+    "Bill of Lading Management": {
+        "objective": "Upload or manually capture a Bill of Lading, review OCR draft values, and save a verified BL for Z-SAD review.",
+        "steps": [
+            "Upload a text PDF, scanned PDF, Word document, or image using Upload BL, or type the BL details manually.",
+            "Wait for ZCAMS OCR to populate draft values when a document is uploaded.",
+            "Verify the BL number, route, transport mode, ZRA regime, consignee, TIN, origin, destination, containers, weight, cargo description, and GN 83 category against the source BL.",
+            "Correct any OCR mistakes before saving because OCR is only a draft assistant.",
+            "Click Save BL, then continue to Reviewed BL to issue the Z-SAD and generate the agency-charge or full-settlement invoice.",
+        ],
+        "outcome": "A verified BL is captured in ZCAMS and is ready for Reviewed BL, Z-SAD generation, GN 83 invoicing, and importer payment follow-up.",
+    },
     "Reviewed BL": {
         "objective": "Create a Z-SAD from an uploaded BL, manage the active Z-SAD, replace the BL when corrections are needed, and prepare payment.",
         "steps": [
@@ -161,11 +262,23 @@ PAGE_TUTORIALS = {
         ],
         "outcome": "The active page refreshes, the BL has one active Z-SAD, superseded Z-SADs stay in history, and billing can continue.",
     },
+    "Reviewed BL & Z-SAD": {
+        "objective": "Review uploaded BLs, issue one active Z-SAD per BL, and prepare the shipment for GN 83 invoicing and payment.",
+        "steps": [
+            "Use BLs Awaiting Review to find newly uploaded BLs that have not yet received a Z-SAD.",
+            "Click Review & Issue Z-SAD only after the BL details have been checked and are ready for customs processing.",
+            "Use Active Reviewed BLs to search reviewed BLs by BL number and confirm the active Z-SAD, consignee TIN, and status.",
+            "Choose Full Settlement when the BL is ready for invoice generation.",
+            "Use Replace BL when a corrected BL must be uploaded, so the current Z-SAD is retired and the audit trail remains intact.",
+            "Issue cargo release only after payment settlement and release rules are satisfied.",
+        ],
+        "outcome": "The reviewed BL has a controlled active Z-SAD, invoice actions are available, replacements remain auditable, and the shipment can continue toward payment and release.",
+    },
     "Invoices": {
         "objective": "Create and settle GN 83-compliant invoices linked to reviewed BLs.",
         "steps": [
             "Confirm the reviewed BL and Z-SAD are correct before billing.",
-            "Choose Full Settlement or Service Fee Only based on the payment scenario.",
+            "Use Full Settlement for the invoice payment scenario.",
             "Let ZCAMS calculate minimum fee, admin fee, VAT, and total.",
             "Use the generated invoice record for payment follow-up.",
             "Mark the invoice as settled once payment is confirmed.",
@@ -264,7 +377,7 @@ NAV_BADGE_KEYS = {
 def sidebar(pathname: str = "/dashboard", user: dict | None = None):
     display = display_user(user)
     role = (user or {}).get("role", "COMPANY_ADMIN").upper()
-    company_id = None if role == "SUPER_ADMIN" else (user or {}).get("company_id")
+    company_id = None if role in {"SUPER_ADMIN", "ADMIN", "OPERATIONS"} else (user or {}).get("company_id")
     counts = counts_for_nav(company_id)
     primary_nav, admin_nav, secondary_nav = nav_items_for_user(user)
 
@@ -326,7 +439,7 @@ def sidebar(pathname: str = "/dashboard", user: dict | None = None):
                     *[nav_link(*item) for item in primary_nav],
                     *(
                         [
-                            html.Div("Administration", className="nav-section-label"),
+                            html.Div("Assigned Roles" if role == "SUPER_ADMIN" else "Administration", className="nav-section-label"),
                             *[nav_link(*item) for item in admin_nav],
                         ]
                         if admin_nav
@@ -406,6 +519,43 @@ def module_help(title: str, text: str):
             html.Div(content, className="help-body tutorial-help"),
         ],
         className="help-panel",
+    )
+
+
+def public_nav(*, active: str | None = None, show_register: bool = True):
+    """Top navigation for pre-login public pages (login, onboarding, tutorials)."""
+    basics_class = "btn-public-basics is-active" if active == "basics" else "btn-public-basics"
+    return html.Nav(
+        [
+            html.Div(
+                [
+                    dcc.Link(
+                        html.Img(
+                            src="/assets/zcams-logo.png",
+                            alt="ZCAMS — ZAFFA CFA Portal",
+                            className="public-logo-img",
+                        ),
+                        href="/login",
+                        className="public-logo",
+                    ),
+                ],
+                className="public-nav-left",
+            ),
+            html.Div(
+                [
+                    dcc.Link(
+                        [icon("lucide:book-open", 10), "Basics"],
+                        href="/tutorials",
+                        className=basics_class,
+                        title="ZCAMS basics — Z-SAD and invoice tutorial",
+                    ),
+                    dcc.Link("Register CFA", href="/onboarding", className="btn-public-outline") if show_register else None,
+                    dcc.Link("Sign In", href="/login", className="btn-public-solid"),
+                ],
+                className="public-nav-actions",
+            ),
+        ],
+        className="public-nav",
     )
 
 

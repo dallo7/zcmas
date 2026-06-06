@@ -303,7 +303,7 @@ def build_story() -> list:
         "<b>3. Reviewed BL &amp; Z-SAD.</b> Each BL is reviewed and assigned a single-use "
         "Z-SAD number with strict uniqueness; corrections require an explicit detach that "
         "retires the old number and cancels its invoice.",
-        "<b>4. Invoice request.</b> The CFA chooses <i>Service Fee Only</i> or "
+        "<b>4. Invoice request.</b> The CFA chooses <i>Full Settlement</i> or "
         "<i>Full Settlement</i>; ZCAMS calculates the GN 83 minimum, the 20% admin fee, "
         "and 16% VAT, ceiling each line.",
         "<b>5. CapitalPay signing.</b> The invoice is sent to CapitalPay for signing and "
@@ -313,7 +313,7 @@ def build_story() -> list:
         "via the Bird Reach API.",
         "<b>7. CapitalPay check-out.</b> A payment link is generated; settlement status is "
         "tracked against the invoice.",
-        "<b>8. Cargo release.</b> Full Settlement auto-releases on payment; Service Fee Only "
+        "<b>8. Cargo release.</b> Full Settlement auto-releases on payment; Full Settlement "
         "enables a manual release once the bank confirms the importer payment.",
         "<b>9. Audit &amp; communication.</b> Every action writes a notification record; "
         "the ZCAMS Chat module answers Gazette Notice questions for the CFA.",
@@ -387,13 +387,13 @@ def build_story() -> list:
             "Strict Z-SAD uniqueness with safe detach &amp; reissue.",
             "Single-use BL number enforcement.",
             "Cancellation cascade: detaching a Z-SAD cancels its invoice.",
-            "Manual release gate for Service Fee Only flows.",
+            "Release gate for Full Settlement flows.",
             "Auto-release on Full Settlement after payment confirmation.",
         ]),
         Paragraph("Invoicing &amp; payments", H2),
         bullet_list([
             "GN 83 minimum fee lookup by route, mode, and cargo category.",
-            "Service Fee Only: 20% admin + 16% VAT (ceiled to whole cents).",
+            "Full Settlement: 20% admin + 16% VAT (ceiled to whole cents).",
             "Full Settlement: GN 83 minimum + 20% admin + 16% VAT (ceiled).",
             "CapitalPay signing with refusal of mock URNs in production.",
             "PDF invoice generation via ReportLab; signed copies persisted.",
@@ -445,7 +445,7 @@ def build_story() -> list:
             "Mock CapitalPay invoices (<i>CPAYMOCK\u2026</i>) are refused unless "
             "<code>CAPITALPAY_MODE=mock</code> is set explicitly.",
             "Full Settlement auto-releases the cargo on successful settlement.",
-            "Service Fee Only requires a manual release after bank confirmation.",
+            "Full Settlement proceeds to cargo release after settlement confirmation.",
         ]),
     ]))
 

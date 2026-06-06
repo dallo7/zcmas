@@ -26,11 +26,11 @@ def test_live_create_signed_invoice_service_fee():
 
     clear_token_cache()
     std = lookup_fee("Import", "Sea", "MOTOR_VEHICLE")
-    calc = calculate_invoice(std, "SERVICE_FEE_ONLY")
+    calc = calculate_invoice(std, "FULL_SETTLEMENT")
     result = create_signed_invoice(
         client_invoice_ref="INV-ZCAMS-LIVE-SVC-001",
         amount=calc["total"],
-        invoice_type="SERVICE_FEE_ONLY",
+        invoice_type="FULL_SETTLEMENT",
         calc=calc,
         customer_name="David Kimani",
         email="cwakhusama@gmail.com",

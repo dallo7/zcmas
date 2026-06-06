@@ -1,0 +1,515 @@
+/* ZCAMS Tutorial deck — vivid presentation styling (/tutorials) */
+
+#page-slot .tutorial-deck-page,
+.public-tutorial-main.tutorial-deck-page {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
+  background: transparent;
+  border-radius: 14px;
+}
+
+#page-slot .public-tutorial-page .tutorial-deck-page,
+.public-tutorial-page .public-tutorial-main.tutorial-deck-page {
+  padding: 24px 20px 32px;
+}
+
+#page-slot .tutorial-deck-card {
+  width: min(1000px, 100%);
+  display: grid;
+  grid-template-rows: 1fr auto;
+  border-radius: 20px;
+  border: 1px solid rgba(11, 107, 52, 0.14);
+  background: #fff;
+  box-shadow:
+    0 4px 6px rgba(13, 25, 11, 0.04),
+    0 20px 48px rgba(13, 25, 11, 0.12);
+  overflow: hidden;
+}
+
+#page-slot .tutorial-slide-frame {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 420px;
+}
+
+#page-slot .tutorial-slide-head {
+  position: relative;
+  padding: 22px 26px 18px;
+  display: grid;
+  gap: 6px;
+  overflow: hidden;
+}
+
+#page-slot .tutorial-slide-head::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 92% 18%, rgba(255, 255, 255, 0.22) 0%, transparent 42%),
+    radial-gradient(circle at 8% 88%, rgba(0, 0, 0, 0.08) 0%, transparent 38%);
+  pointer-events: none;
+}
+
+#page-slot .tutorial-slide-head > * {
+  position: relative;
+  z-index: 1;
+}
+
+#page-slot .tutorial-slide-tag {
+  display: inline-flex;
+  align-self: start;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#page-slot .tutorial-slide-title {
+  margin: 0;
+  font-size: clamp(22px, 2.8vw, 32px);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+#page-slot .tutorial-slide-subtitle {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+#page-slot .tutorial-slide-body {
+  padding: 18px 22px 20px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+#page-slot .tutorial-lead {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+#page-slot .tutorial-panel-copy {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+#page-slot .tutorial-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+#page-slot .tutorial-chip-row.center {
+  justify-content: center;
+}
+
+#page-slot .tutorial-chip {
+  display: inline-flex;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+#page-slot .tutorial-chip.tone-green { background: #22c55e; color: #fff; }
+#page-slot .tutorial-chip.tone-blue { background: #3b82f6; color: #fff; }
+#page-slot .tutorial-chip.tone-teal { background: #14b8a6; color: #fff; }
+#page-slot .tutorial-chip.tone-amber { background: #f59e0b; color: #fff; }
+#page-slot .tutorial-chip.tone-violet { background: #8b5cf6; color: #fff; }
+#page-slot .tutorial-chip.tone-gold { background: #eab308; color: #422006; }
+
+#page-slot .tutorial-arrow {
+  color: #94a3b8;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+#page-slot .tutorial-hero-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+#page-slot .tutorial-title-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+#page-slot .tutorial-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#page-slot .tutorial-panel-card {
+  padding: 12px 12px 11px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  border-left-width: 4px;
+  display: grid;
+  gap: 5px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+#page-slot .tutorial-panel-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.11);
+}
+
+#page-slot .tutorial-panel-card.tone-green { background: linear-gradient(135deg, #ecfdf3, #d1fae5); border-color: #16a34a; }
+#page-slot .tutorial-panel-card.tone-blue { background: linear-gradient(135deg, #eff6ff, #dbeafe); border-color: #2563eb; }
+#page-slot .tutorial-panel-card.tone-teal { background: linear-gradient(135deg, #f0fdfa, #ccfbf1); border-color: #0d9488; }
+#page-slot .tutorial-panel-card.tone-amber { background: linear-gradient(135deg, #fffbeb, #fef3c7); border-color: #d97706; }
+#page-slot .tutorial-panel-card.tone-violet { background: linear-gradient(135deg, #f5f3ff, #ede9fe); border-color: #7c3aed; }
+
+#page-slot .tutorial-panel-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+#page-slot .tutorial-panel-card.tone-green .tutorial-panel-icon { color: #15803d; }
+#page-slot .tutorial-panel-card.tone-blue .tutorial-panel-icon { color: #1d4ed8; }
+#page-slot .tutorial-panel-card.tone-teal .tutorial-panel-icon { color: #0f766e; }
+#page-slot .tutorial-panel-card.tone-amber .tutorial-panel-icon { color: #b45309; }
+#page-slot .tutorial-panel-card.tone-violet .tutorial-panel-icon { color: #6d28d9; }
+
+#page-slot .tutorial-panel-card strong {
+  font-size: 13px;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+#page-slot .tutorial-flow-timeline {
+  display: grid;
+  gap: 0;
+}
+
+#page-slot .tutorial-flow-step {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  border-left-width: 5px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+#page-slot .tutorial-flow-step.tone-green { background: linear-gradient(90deg, #f0fdf4 0%, #fff 100%); border-color: #22c55e; }
+#page-slot .tutorial-flow-step.tone-blue { background: linear-gradient(90deg, #eff6ff 0%, #fff 100%); border-color: #3b82f6; }
+#page-slot .tutorial-flow-step.tone-teal { background: linear-gradient(90deg, #f0fdfa 0%, #fff 100%); border-color: #14b8a6; }
+#page-slot .tutorial-flow-step.tone-amber { background: linear-gradient(90deg, #fffbeb 0%, #fff 100%); border-color: #f59e0b; }
+#page-slot .tutorial-flow-step.tone-violet { background: linear-gradient(90deg, #f5f3ff 0%, #fff 100%); border-color: #8b5cf6; }
+#page-slot .tutorial-flow-step.tone-gold { background: linear-gradient(90deg, #fefce8 0%, #fff 100%); border-color: #eab308; }
+
+#page-slot .tutorial-step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.2);
+}
+
+#page-slot .tutorial-step-num.tone-green { background: linear-gradient(135deg, #16a34a, #22c55e); }
+#page-slot .tutorial-step-num.tone-blue { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+#page-slot .tutorial-step-num.tone-teal { background: linear-gradient(135deg, #0f766e, #14b8a6); }
+#page-slot .tutorial-step-num.tone-amber { background: linear-gradient(135deg, #d97706, #f59e0b); }
+#page-slot .tutorial-step-num.tone-violet { background: linear-gradient(135deg, #6d28d9, #8b5cf6); }
+#page-slot .tutorial-step-num.tone-gold { background: linear-gradient(135deg, #ca8a04, #eab308); }
+
+#page-slot .tutorial-step-copy {
+  display: grid;
+  gap: 4px;
+}
+
+#page-slot .tutorial-step-copy strong {
+  font-size: 14px;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+#page-slot .tutorial-step-loc {
+  display: inline-flex;
+  align-self: start;
+  padding: 2px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+#page-slot .tutorial-step-loc.tone-green { background: #16a34a; color: #fff; }
+#page-slot .tutorial-step-loc.tone-blue { background: #2563eb; color: #fff; }
+#page-slot .tutorial-step-loc.tone-teal { background: #0d9488; color: #fff; }
+#page-slot .tutorial-step-loc.tone-amber { background: #d97706; color: #fff; }
+#page-slot .tutorial-step-loc.tone-violet { background: #7c3aed; color: #fff; }
+#page-slot .tutorial-step-loc.tone-gold { background: #ca8a04; color: #fff; }
+
+#page-slot .tutorial-flow-arrow {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+  color: #94a3b8;
+}
+
+#page-slot .tutorial-callout {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  border-left-width: 4px;
+  display: grid;
+  gap: 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+#page-slot .tutorial-callout.tone-teal {
+  background: linear-gradient(90deg, #ecfeff, #f0fdfa);
+  border-color: #06b6d4;
+}
+
+#page-slot .tutorial-callout.tone-amber {
+  background: linear-gradient(90deg, #fff7ed, #fffbeb);
+  border-color: #f97316;
+}
+
+#page-slot .tutorial-callout strong {
+  font-size: 13px;
+  color: #0f172a;
+}
+
+#page-slot .tutorial-bullets {
+  margin: 0;
+  padding-left: 18px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+#page-slot .tutorial-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#page-slot .tutorial-tool-card {
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  border-top-width: 4px;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+#page-slot .tutorial-tool-card.tone-teal { background: #f0fdfa; border-color: #99f6e4; border-top-color: #0d9488; }
+#page-slot .tutorial-tool-card.tone-amber { background: #fffbeb; border-color: #fde68a; border-top-color: #d97706; }
+#page-slot .tutorial-tool-card.tone-blue { background: #eff6ff; border-color: #bfdbfe; border-top-color: #2563eb; }
+#page-slot .tutorial-tool-card.tone-green { background: #ecfdf3; border-color: #bbf7d0; border-top-color: #16a34a; }
+#page-slot .tutorial-tool-card.tone-violet { background: #f5f3ff; border-color: #ddd6fe; border-top-color: #7c3aed; }
+
+#page-slot .tutorial-tool-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+#page-slot .tutorial-tool-num.tone-teal { background: #0d9488; }
+#page-slot .tutorial-tool-num.tone-amber { background: #d97706; }
+#page-slot .tutorial-tool-num.tone-blue { background: #2563eb; }
+#page-slot .tutorial-tool-num.tone-green { background: #16a34a; }
+#page-slot .tutorial-tool-num.tone-violet { background: #7c3aed; }
+
+#page-slot .tutorial-tool-card strong {
+  font-size: 12px;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+#page-slot .tutorial-role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#page-slot .tutorial-role-card {
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  border-top-width: 4px;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
+}
+
+#page-slot .tutorial-role-card.tone-violet { background: #faf5ff; border-color: #ddd6fe; border-top-color: #7c3aed; }
+#page-slot .tutorial-role-card.tone-blue { background: #eff6ff; border-color: #bfdbfe; border-top-color: #2563eb; }
+#page-slot .tutorial-role-card.tone-amber { background: #fffbeb; border-color: #fde68a; border-top-color: #d97706; }
+#page-slot .tutorial-role-card.tone-green { background: #ecfdf3; border-color: #bbf7d0; border-top-color: #16a34a; }
+#page-slot .tutorial-role-card.tone-teal { background: #f0fdfa; border-color: #99f6e4; border-top-color: #0d9488; }
+
+#page-slot .tutorial-role-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+#page-slot .tutorial-role-card.tone-violet .tutorial-role-icon { color: #7c3aed; }
+#page-slot .tutorial-role-card.tone-blue .tutorial-role-icon { color: #2563eb; }
+#page-slot .tutorial-role-card.tone-amber .tutorial-role-icon { color: #d97706; }
+#page-slot .tutorial-role-card.tone-green .tutorial-role-icon { color: #16a34a; }
+#page-slot .tutorial-role-card.tone-teal .tutorial-role-icon { color: #0d9488; }
+
+#page-slot .tutorial-role-card strong {
+  font-size: 12px;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+#page-slot .tutorial-role-goal {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+#page-slot .tutorial-summary-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+#page-slot .tutorial-summary-list li {
+  margin-bottom: 4px;
+}
+
+#page-slot .tutorial-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #1e40af;
+  background: linear-gradient(90deg, #dbeafe, #eff6ff);
+  border: 1px solid #93c5fd;
+}
+
+#page-slot .tutorial-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+#page-slot .tutorial-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  justify-content: center;
+}
+
+#page-slot .tutorial-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: #cbd5e1;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+#page-slot .tutorial-dot:hover {
+  transform: scale(1.15);
+  background: #94a3b8;
+}
+
+#page-slot .tutorial-dot.is-active {
+  background: linear-gradient(135deg, #06451f, #22c55e);
+  transform: scale(1.25);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+#page-slot .tutorial-counter {
+  min-width: 52px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+@media (max-width: 900px) {
+  #page-slot .tutorial-admin-grid,
+  #page-slot .tutorial-tool-grid,
+  #page-slot .tutorial-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  #page-slot .tutorial-admin-grid,
+  #page-slot .tutorial-tool-grid,
+  #page-slot .tutorial-role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #page-slot .tutorial-slide-head {
+    padding: 16px 18px 14px;
+  }
+
+  #page-slot .tutorial-slide-body {
+    padding: 14px 16px 16px;
+  }
+}

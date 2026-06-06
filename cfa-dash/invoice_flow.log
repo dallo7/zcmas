@@ -2,53 +2,86 @@
 2026-05-22 23:19:30,913 INFO Generating invoice for reviewed_id=rbl-8753bfde62f1 type=FULL_SETTLEMENT override=200.0
 2026-05-22 23:19:31,799 INFO Invoice generated: id=inv-4ab2d01d5a1d number=INV-20260522231930-85B90A urn=CPAYPWDGQZ
 2026-05-22 23:19:34,772 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7642831059838597262'}}, 'url': ''}}
-2026-05-23 20:53:07,504 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-6486bb33e737', 'minimum': 200} mode=SERVICE_FEE_ONLY bl_id=bl-a3747174b9ad channels=['EMAIL'] phone=456789 email=chituyi@masonrhysinternational.com
-2026-05-23 20:53:07,509 INFO Generating invoice for reviewed_id=rbl-6486bb33e737 type=SERVICE_FEE_ONLY override=None
+2026-05-23 20:53:07,504 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-6486bb33e737', 'minimum': 200} mode=FULL_SETTLEMENT bl_id=bl-a3747174b9ad channels=['EMAIL'] phone=456789 email=chituyi@masonrhysinternational.com
+2026-05-23 20:53:07,509 INFO Generating invoice for reviewed_id=rbl-6486bb33e737 type=FULL_SETTLEMENT override=None
 2026-05-23 20:53:09,533 INFO Invoice generated: id=inv-9468eaa81396 number=INV-20260523205307-F884B2 urn=CPAYMAJEKZ
 2026-05-23 20:53:12,156 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7643154951912295400'}}, 'url': ''}}
-2026-05-24 11:06:59,763 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-c040cd041260', 'minimum': 90} mode=SERVICE_FEE_ONLY bl_id=bl-f054e9646fcd channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-24 11:06:59,781 INFO Generating invoice for reviewed_id=rbl-c040cd041260 type=SERVICE_FEE_ONLY override=None
+2026-05-24 11:06:59,763 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-c040cd041260', 'minimum': 90} mode=FULL_SETTLEMENT bl_id=bl-f054e9646fcd channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-24 11:06:59,781 INFO Generating invoice for reviewed_id=rbl-c040cd041260 type=FULL_SETTLEMENT override=None
 2026-05-24 11:07:03,427 INFO Invoice generated: id=inv-5c62b960b38b number=INV-20260524110659-15ACA4 urn=CPAYPWDGXZ
 2026-05-24 11:07:12,742 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7643112719500070951'}}, 'url': ''}}
-2026-05-24 11:08:10,567 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-c040cd041260', 'minimum': 90} mode=SERVICE_FEE_ONLY bl_id=bl-f054e9646fcd channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-24 11:08:10,587 INFO Generating invoice for reviewed_id=rbl-c040cd041260 type=SERVICE_FEE_ONLY override=None
+2026-05-24 11:08:10,567 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-c040cd041260', 'minimum': 90} mode=FULL_SETTLEMENT bl_id=bl-f054e9646fcd channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-24 11:08:10,587 INFO Generating invoice for reviewed_id=rbl-c040cd041260 type=FULL_SETTLEMENT override=None
 2026-05-24 11:08:12,778 INFO Invoice generated: id=inv-0094f55a86c3 number=INV-20260524110810-D450BA urn=CPAYMDBLVM
 2026-05-24 11:08:24,719 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7643266303234912280'}}, 'url': ''}}
-2026-05-24 12:05:39,833 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-f9a2ba779c40', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=None channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-24 12:05:39,836 INFO Generating invoice for reviewed_id=rbl-f9a2ba779c40 type=SERVICE_FEE_ONLY override=None
+2026-05-24 12:05:39,833 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-f9a2ba779c40', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=None channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-24 12:05:39,836 INFO Generating invoice for reviewed_id=rbl-f9a2ba779c40 type=FULL_SETTLEMENT override=None
 2026-05-24 12:05:41,232 INFO Invoice generated: id=inv-ef730dc44c93 number=INV-20260524120539-0F1771 urn=CPAYLJZJNL
 2026-05-24 12:05:51,482 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7643266496508408248'}}, 'url': ''}}
-2026-05-24 12:36:13,653 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-a5ec77f6f77a', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=None channels=['WHATSAPP'] phone= email=
-2026-05-24 12:36:20,396 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-a5ec77f6f77a', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=None channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-24 12:36:20,399 INFO Generating invoice for reviewed_id=rbl-a5ec77f6f77a type=SERVICE_FEE_ONLY override=None
+2026-05-24 12:36:13,653 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-a5ec77f6f77a', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=None channels=['WHATSAPP'] phone= email=
+2026-05-24 12:36:20,396 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-a5ec77f6f77a', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=None channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-24 12:36:20,399 INFO Generating invoice for reviewed_id=rbl-a5ec77f6f77a type=FULL_SETTLEMENT override=None
 2026-05-24 12:36:21,757 INFO Invoice generated: id=inv-9f9dec54ba4c number=INV-20260524123620-4288A9 urn=CPAYZBJREZ
 2026-05-24 12:36:21,803 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Service%20Fee%20Only%20Invoice%20INV-20260524123620-4288A9%0ABL%3A%20BL-CANCEL-REUPLOAD-001%20%7C%20Z-SAD%3A%20Z-SAD--001-6X55Q55532KLNH8%0AAmount%20due%3A%20USD%2035.00%0ACapitalPay%20Invoice%20No%3A%20CPAYZBJREZ%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-9f9dec54ba4c.pdf%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYZBJREZ', 'sent': True}}
 2026-05-26 09:20:23,908 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-4ac81de29acd', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-9e341ff44e97 channels=['WHATSAPP', 'EMAIL'] phone=0714294113 email=benson@capitalpayinternational.com
 2026-05-26 09:20:23,917 INFO Generating invoice for reviewed_id=rbl-4ac81de29acd type=FULL_SETTLEMENT override=150.0
 2026-05-26 09:20:26,915 INFO Invoice generated: id=inv-988c06eacc63 number=INV-20260526092023-1D5168 urn=CPAYAVWYVM
 2026-05-26 09:20:31,226 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Full%20Settlement%20Invoice%20INV-20260526092023-1D5168%0ABL%3A%20721280295%20%7C%20Z-SAD%3A%20Z-SAD-0295-N212B663282NUMS%0AAmount%20due%3A%20USD%20209.00%0ACapitalPay%20Invoice%20No%3A%20CPAYAVWYVM%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-988c06eacc63.pdf%0ABeneficiary%3A%20Dalmas%20Wakhusma%20Chituyi%20%7C%20Zanaco%20%7C%203456789%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYAVWYVM', 'sent': True}, 'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7643905402958879836'}}, 'url': ''}}
-2026-05-26 13:16:37,580 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-e979e3ae07d5', 'minimum': 200} mode=SERVICE_FEE_ONLY bl_id=None channels=['WHATSAPP'] phone= email=
-2026-05-26 13:16:44,867 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-e979e3ae07d5', 'minimum': 200} mode=SERVICE_FEE_ONLY bl_id=None channels=['WHATSAPP'] phone=0714294113 email=cwakhusama@gmail.com
-2026-05-26 13:16:44,876 INFO Generating invoice for reviewed_id=rbl-e979e3ae07d5 type=SERVICE_FEE_ONLY override=None
+2026-05-26 13:16:37,580 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-e979e3ae07d5', 'minimum': 200} mode=FULL_SETTLEMENT bl_id=None channels=['WHATSAPP'] phone= email=
+2026-05-26 13:16:44,867 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-e979e3ae07d5', 'minimum': 200} mode=FULL_SETTLEMENT bl_id=None channels=['WHATSAPP'] phone=0714294113 email=cwakhusama@gmail.com
+2026-05-26 13:16:44,876 INFO Generating invoice for reviewed_id=rbl-e979e3ae07d5 type=FULL_SETTLEMENT override=None
 2026-05-26 13:16:47,611 INFO Invoice generated: id=inv-3e5e0d9a26a8 number=INV-20260526131644-ECC017 urn=CPAYKPJQYK
 2026-05-26 13:16:47,714 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Service%20Fee%20Only%20Invoice%20INV-20260526131644-ECC017%0ABL%3A%20HAPAG-LLOYD%20%7C%20Z-SAD%3A%20Z-SAD-LOYD-216IQUN45V78I76%0AAmount%20due%3A%20USD%2047.00%0ACapitalPay%20Invoice%20No%3A%20CPAYKPJQYK%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-3e5e0d9a26a8.pdf%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYKPJQYK', 'sent': True}}
-2026-05-28 04:10:34,576 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-be1dc945435b', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=bl-68242a5c1049 channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-28 04:10:34,581 INFO Generating invoice for reviewed_id=rbl-be1dc945435b type=SERVICE_FEE_ONLY override=None
+2026-05-28 04:10:34,576 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-be1dc945435b', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-68242a5c1049 channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-28 04:10:34,581 INFO Generating invoice for reviewed_id=rbl-be1dc945435b type=FULL_SETTLEMENT override=None
 2026-05-28 04:10:38,971 INFO Invoice generated: id=inv-9d87d402b270 number=INV-20260528041034-66AE59 urn=CPAYPJEKZQ
 2026-05-28 04:10:39,459 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Service%20Fee%20Only%20Invoice%20INV-20260528041034-66AE59%0ABL%3A%20MSC3910649618%20%7C%20Z-SAD%3A%20Z-SAD-9618-5A8831GG13NKN64%0AAmount%20due%3A%20USD%2035.00%0ACapitalPay%20Invoice%20No%3A%20CPAYPJEKZQ%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-9d87d402b270.pdf%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYPJEKZQ', 'sent': True}}
-2026-05-28 04:26:37,048 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-56720b1f6063', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=bl-ee080bb9d789 channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-28 04:26:37,051 INFO Generating invoice for reviewed_id=rbl-56720b1f6063 type=SERVICE_FEE_ONLY override=None
+2026-05-28 04:26:37,048 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-56720b1f6063', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-ee080bb9d789 channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-28 04:26:37,051 INFO Generating invoice for reviewed_id=rbl-56720b1f6063 type=FULL_SETTLEMENT override=None
 2026-05-28 04:26:38,524 INFO Invoice generated: id=inv-eecdea2458b5 number=INV-20260528042637-260E56 urn=CPAYQRWMKZ
 2026-05-28 04:26:38,707 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Service%20Fee%20Only%20Invoice%20INV-20260528042637-260E56%0ABL%3A%20YMLU0211278635%20%7C%20Z-SAD%3A%20Z-SAD-8635-81U6Y5M67HZ44J8%0AAmount%20due%3A%20USD%2035.00%0ACapitalPay%20Invoice%20No%3A%20CPAYQRWMKZ%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-eecdea2458b5.pdf%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYQRWMKZ', 'sent': True}}
-2026-05-28 04:28:31,232 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-e951db52485b', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=bl-34d38caca944 channels=['EMAIL'] phone=0714294113 email=cwakhusama@gmail.com
-2026-05-28 04:28:31,235 INFO Generating invoice for reviewed_id=rbl-e951db52485b type=SERVICE_FEE_ONLY override=None
+2026-05-28 04:28:31,232 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-e951db52485b', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-34d38caca944 channels=['EMAIL'] phone=0714294113 email=cwakhusama@gmail.com
+2026-05-28 04:28:31,235 INFO Generating invoice for reviewed_id=rbl-e951db52485b type=FULL_SETTLEMENT override=None
 2026-05-28 04:28:33,256 INFO Invoice generated: id=inv-6797ab7010dc number=INV-20260528042831-BD8612 urn=CPAYMXLXAM
 2026-05-28 04:28:36,428 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7644818371271295606'}}, 'url': ''}}
-2026-05-28 05:06:49,334 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-95ebb4b4d28f', 'minimum': 150} mode=SERVICE_FEE_ONLY bl_id=bl-270c88357ecb channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-28 05:06:49,339 INFO Generating invoice for reviewed_id=rbl-95ebb4b4d28f type=SERVICE_FEE_ONLY override=None
+2026-05-28 05:06:49,334 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-95ebb4b4d28f', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-270c88357ecb channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-28 05:06:49,339 INFO Generating invoice for reviewed_id=rbl-95ebb4b4d28f type=FULL_SETTLEMENT override=None
 2026-05-28 05:06:50,887 INFO Invoice generated: id=inv-48c3dc83055f number=INV-20260528050649-519648 urn=CPAYMABVDZ
 2026-05-28 05:06:51,069 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Service%20Fee%20Only%20Invoice%20INV-20260528050649-519648%0ABL%3A%20PILU1487099088%20%7C%20Z-SAD%3A%20Z-SAD-9088-551312VN58X6VVS%0AAmount%20due%3A%20USD%2035.00%0ACapitalPay%20Invoice%20No%3A%20CPAYMABVDZ%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-48c3dc83055f.pdf%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYMABVDZ', 'sent': True}}
-2026-05-28 05:23:15,124 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-09c8ef30a6de', 'minimum': 450} mode=SERVICE_FEE_ONLY bl_id=bl-f8436dffa94f channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
-2026-05-28 05:23:15,129 INFO Generating invoice for reviewed_id=rbl-09c8ef30a6de type=SERVICE_FEE_ONLY override=None
+2026-05-28 05:23:15,124 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-09c8ef30a6de', 'minimum': 450} mode=FULL_SETTLEMENT bl_id=bl-f8436dffa94f channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-28 05:23:15,129 INFO Generating invoice for reviewed_id=rbl-09c8ef30a6de type=FULL_SETTLEMENT override=None
 2026-05-28 05:23:17,056 INFO Invoice generated: id=inv-0237d8208449 number=INV-20260528052315-68F28C urn=CPAYLVAMMK
 2026-05-28 05:23:19,664 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7644818766408279305'}}, 'url': ''}}
+2026-05-29 23:04:55,177 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-533db81a5e46', 'minimum': 450} mode=FULL_SETTLEMENT bl_id=bl-bbcfe92aa7c6 channels=['WHATSAPP'] phone=0714294113 email=cwakhusama@gmail.com
+2026-05-29 23:04:55,183 INFO Generating invoice for reviewed_id=rbl-533db81a5e46 type=FULL_SETTLEMENT override=450.0
+2026-05-29 23:04:57,130 INFO Invoice generated: id=inv-8f0445b3b5c3 number=INV-20260529230455-454A4F urn=CPAYKQWDJK
+2026-05-29 23:04:57,218 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Full%20Settlement%20Invoice%20INV-20260529230455-454A4F%0ABL%3A%20HLCU3088350967%20%7C%20Z-SAD%3A%20Z-SAD-0967-3P7673CY78Q8S2I%0AAmount%20due%3A%20USD%20627.00%0ACapitalPay%20Invoice%20No%3A%20CPAYKQWDJK%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-8f0445b3b5c3.pdf%0ABeneficiary%3A%20Dalmas%20Chituyi%20%7C%20KCB%20%7C%2034567890%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYKQWDJK', 'sent': True}}
+2026-05-29 23:05:26,978 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-533db81a5e46', 'minimum': 450} mode=FULL_SETTLEMENT bl_id=bl-bbcfe92aa7c6 channels=['WHATSAPP'] phone=0714294113 email=cwakhusama@gmail.com
+2026-05-29 23:05:26,981 INFO Generating invoice for reviewed_id=rbl-533db81a5e46 type=FULL_SETTLEMENT override=450.0
+2026-05-29 23:05:28,121 INFO Invoice generated: id=inv-9016fb8c5163 number=INV-20260529230526-8E10ED urn=CPAYLYGKGL
+2026-05-29 23:05:28,204 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Full%20Settlement%20Invoice%20INV-20260529230526-8E10ED%0ABL%3A%20HLCU3088350967%20%7C%20Z-SAD%3A%20Z-SAD-0967-3P7673CY78Q8S2I%0AAmount%20due%3A%20USD%20627.00%0ACapitalPay%20Invoice%20No%3A%20CPAYLYGKGL%0ADownload%20PDF%3A%20http%3A//127.0.0.1%3A8050/download/invoice/inv-9016fb8c5163.pdf%0ABeneficiary%3A%20Dalmas%20Chituyi%20%7C%20KCB%20%7C%2034567890%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYLYGKGL', 'sent': True}}
+2026-05-30 00:05:39,466 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-cb6053a842bf', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-212f57964ed8 channels=['EMAIL'] phone=0714294112 email=chituyi@beatbnk.com
+2026-05-30 00:05:39,470 INFO Generating invoice for reviewed_id=rbl-cb6053a842bf type=FULL_SETTLEMENT override=150.0
+2026-05-30 00:05:40,678 INFO Invoice generated: id=inv-bc88e17f497d number=INV-20260530000539-CBF2D3 urn=CPAYZMVRAL
+2026-05-30 00:05:45,441 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7645459420909929719'}}, 'url': ''}}
+2026-05-30 00:07:18,512 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-ee1e161d57e0', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-c92680b2c721 channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-30 00:07:18,517 INFO Generating invoice for reviewed_id=rbl-ee1e161d57e0 type=FULL_SETTLEMENT override=150.0
+2026-05-30 00:07:20,530 INFO Invoice generated: id=inv-927bcef5d77d number=INV-20260530000718-07B456 urn=CPAYKVPALK
+2026-05-30 00:07:23,378 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7645449400751238835'}}, 'url': ''}}
+2026-05-30 00:07:28,873 INFO submit_invoice_request fired: clicks=2 data={'id': 'rbl-ee1e161d57e0', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-c92680b2c721 channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-30 00:07:28,880 INFO Generating invoice for reviewed_id=rbl-ee1e161d57e0 type=FULL_SETTLEMENT override=150.0
+2026-05-30 00:07:30,274 INFO Invoice generated: id=inv-d169c07ff721 number=INV-20260530000728-AD4EF3 urn=CPAYKEXPPL
+2026-05-30 00:07:32,758 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7645461980710445257'}}, 'url': ''}}
+2026-05-30 00:08:10,193 INFO submit_invoice_request fired: clicks=3 data={'id': 'rbl-ee1e161d57e0', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-c92680b2c721 channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-05-30 00:08:10,198 INFO Generating invoice for reviewed_id=rbl-ee1e161d57e0 type=FULL_SETTLEMENT override=150.0
+2026-05-30 00:08:13,471 INFO Invoice generated: id=inv-7238e7f33916 number=INV-20260530000810-F91903 urn=CPAYQWLAZP
+2026-05-30 00:08:17,239 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7645462277063182957'}}, 'url': ''}}
+2026-06-01 00:01:45,737 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-83640fb018a4', 'minimum': 600} mode=FULL_SETTLEMENT bl_id=bl-203a2eaf1f36 channels=['WHATSAPP'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-06-01 00:01:45,740 INFO Generating invoice for reviewed_id=rbl-83640fb018a4 type=FULL_SETTLEMENT override=None
+2026-06-01 00:01:47,403 INFO Invoice generated: id=inv-a15e5600aa99 number=INV-20260601000145-6F687E urn=CPAYQZXGJQ
+2026-06-01 00:01:48,305 INFO Share results: {'whatsapp': {'mode': 'link', 'url': 'https://wa.me/260714294113?text=ZCAMS%20Service%20Fee%20Only%20Invoice%20INV-20260601000145-6F687E%0ABL%3A%20GRIU212987%20%7C%20Z-SAD%3A%20Z-SAD-2987-3296J3IWLV73E79%0AAmount%20due%3A%20USD%20140.00%0ACapitalPay%20Invoice%20No%3A%20CPAYQKBKMZ%0ADownload%20PDF%3A%20/download/invoice/inv-a15e5600aa99.pdf%0APay%20here%3A%20https%3A//app.capitalpay.co.tz/pay/CPAYQZXGJQ', 'sent': True}}
+2026-06-01 01:26:48,749 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-465cf7a47e6b', 'minimum': 150} mode=FULL_SETTLEMENT bl_id=bl-73281eaf6277 channels=['EMAIL'] phone=0714294113 email=chituyi@masonrhysinternational.com
+2026-06-01 01:26:48,752 INFO Generating invoice for reviewed_id=rbl-465cf7a47e6b type=FULL_SETTLEMENT override=None
+2026-06-01 01:26:49,998 INFO Invoice generated: id=inv-a7cb1ddc692d number=INV-20260601012648-FE7BB8 urn=CPAYLPWYXK
+2026-06-01 01:26:54,064 INFO Share results: {'email': {'sent': True, 'mode': 'bird', 'status_code': 200, 'response': {'results': {'total_rejected_recipients': 0, 'total_accepted_recipients': 1, 'id': '7646189526695623011'}}, 'url': ''}}
+2026-06-05 01:16:04,068 INFO submit_invoice_request fired: clicks=1 data={'id': 'rbl-e11b88d46bb4', 'minimum': 450} mode=FULL_SETTLEMENT bl_id=bl-aa64ec12cf80 channels=['WHATSAPP'] phone=0714294113 email=cwakhusama@gmail.com

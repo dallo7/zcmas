@@ -90,6 +90,10 @@ def layout(**_kwargs):
                 html.Div(
                     [
                         html.H2("Ask ZCAMS"),
+                        html.P(
+                            "Ask workflow questions about BL review, Z-SAD generation, GN 83 fees, invoices, payments, and cargo release.",
+                            className="muted section-lead",
+                        ),
                         dcc.Store(id="zcams-chat-history", data=[]),
                         html.Div(_render_messages([]), id="chat-messages", className="zcams-chat-window"),
                         dcc.Textarea(

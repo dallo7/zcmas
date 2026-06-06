@@ -3,7 +3,7 @@ from dash import Input, Output, State, callback, ctx, dcc, html, no_update, regi
 from dash.exceptions import PreventUpdate
 
 from components.icons import icon
-from components.layout import header
+from components.layout import header, section_label
 from services import auth, repository
 
 
@@ -48,7 +48,8 @@ def _admin_grid(grid_id: str, columns: list[dict], row_data: list[dict] | None =
         },
         dashGridOptions={
             "rowSelection": "multiple",
-            "suppressRowClickSelection": True,
+            "rowMultiSelectWithClick": True,
+            "suppressRowClickSelection": False,
             "animateRows": True,
             "enableCellTextSelection": True,
             "ensureDomOrder": True,
@@ -69,8 +70,7 @@ def _section_title(title: str, subtitle: str, icon_name: str):
 
 def _role_options():
     return [
-        {"label": "Company Admin", "value": auth.ROLE_COMPANY_ADMIN},
-        {"label": "Declarant", "value": auth.ROLE_DECLARANT},
+        {"label": "Declarant / Agent", "value": auth.ROLE_DECLARANT},
     ]
 
 
@@ -81,6 +81,18 @@ def _company_id_for_admin(user: dict | None) -> str:
 
 def _notice(message: str, kind: str = "success"):
     return html.Div(message, className=f"notice {kind}")
+
+
+def _mail_progress(label: str = "Waiting for resend action.", percent: int = 0, state: str = "idle"):
+    visible = state != "idle"
+    percent = max(0, min(100, int(percent)))
+    return html.Div(
+        [
+            html.Div([html.Span(label), html.Span(f"{percent}%")], className="mail-progress-label"),
+            html.Div(html.Div(style={"width": f"{percent}%"}, className="mail-progress-fill"), className="mail-progress-track"),
+        ],
+        className=f"mail-progress {state}{' is-visible' if visible else ''}",
+    )
 
 
 def _metric_card(title: str, value, icon_name: str, tone: str = "green", detail: str | None = None):
@@ -236,12 +248,20 @@ def layout(**_kwargs):
                                             html.Button([icon("lucide:save", 14), "Update Selected"], id="admin-user-update", className="btn-secondary", type="button"),
                                             html.Button([icon("lucide:user-check", 14), "Activate"], id="admin-user-activate", className="btn-secondary", type="button"),
                                             html.Button([icon("lucide:user-x", 14), "Suspend"], id="admin-user-suspend", className="btn-warning", type="button"),
+                                            html.Button([icon("lucide:mail-check", 14), "Resend Email"], id="admin-user-resend-email", className="btn-secondary", type="button"),
                                             html.Button([icon("lucide:trash-2", 14), "Delete"], id="admin-user-delete", className="btn-danger", type="button"),
                                             html.Button([icon("lucide:refresh-cw", 14), "Refresh"], id="admin-user-refresh", className="btn-secondary", type="button"),
                                         ],
                                         className="row-actions admin-actions",
                                     ),
                                     html.Div(id="admin-user-action-message"),
+                                    html.Div(id="admin-user-resend-progress-live", children=_mail_progress()),
+                                    html.Div(id="admin-user-resend-progress", children=_mail_progress()),
+                                    section_label(
+                                        "Declarant User Register",
+                                        "Create, select, update, activate, suspend, or delete Declarant accounts for this CFA only.",
+                                        "lucide:users-round",
+                                    ),
                                     _admin_search("admin-user-search", "Search users by name, email, role, or status..."),
                                     _admin_grid(
                                         "admin-users-grid",
@@ -267,6 +287,11 @@ def layout(**_kwargs):
                                 "Company-scoped BL, Z-SAD, invoice, payment, and release health in one table.",
                                 "lucide:workflow",
                             ),
+                            section_label(
+                                "Shipment Workflow Table",
+                                "Search company BLs and follow each shipment through review, Z-SAD, invoice, payment, and release status.",
+                                "lucide:table-properties",
+                            ),
                             _admin_search("admin-operational-search", "Search BL, consignee, Z-SAD, invoice, status, or payment..."),
                             html.Div(id="admin-operational-overview"),
                         ],
@@ -279,6 +304,11 @@ def layout(**_kwargs):
                                 "Profile readiness, documents, contract signature state, notifications, and open support tickets.",
                                 "lucide:shield-check",
                             ),
+                            section_label(
+                                "Attention & Activity Feed",
+                                "Review company readiness, documents, contracts, notifications, support tickets, and audit activity in one place.",
+                                "lucide:list-checks",
+                            ),
                             html.Div(id="admin-compliance-overview"),
                         ],
                         className="card section-card stack admin-command-section",
@@ -289,6 +319,11 @@ def layout(**_kwargs):
                                 "Customer Service Support Tools",
                                 "Use these lookups during support calls. Enter one identifier and get an actionable answer.",
                                 "lucide:life-buoy",
+                            ),
+                            section_label(
+                                "Guided Lookup Tools",
+                                "Use these support utilities during calls to resolve shipment, payment, user, document, and GN 83 questions.",
+                                "lucide:search-check",
                             ),
                             html.Div(
                                 [
@@ -429,6 +464,7 @@ def load_selected_admin_user(selected_rows):
 
 @callback(
     Output("admin-user-action-message", "children", allow_duplicate=True),
+    Output("admin-user-resend-progress", "children"),
     Output("admin-dashboard-refresh", "data", allow_duplicate=True),
     Input("admin-user-create", "n_clicks"),
     Input("admin-user-update", "n_clicks"),
@@ -442,6 +478,13 @@ def load_selected_admin_user(selected_rows):
     State("auth-user", "data"),
     State("admin-dashboard-refresh", "data"),
     prevent_initial_call=True,
+    running=[
+        (
+            Output("admin-user-resend-progress-live", "children"),
+            _mail_progress("Sending login credentials. Please wait...", 68, "sending"),
+            _mail_progress(),
+        )
+    ],
 )
 def admin_user_create_or_update(_create, _update, selected_rows, first, last, email, phone, whatsapp, role, user, refresh):
     try:
@@ -468,25 +511,56 @@ def admin_user_create_or_update(_create, _update, selected_rows, first, last, em
     Output("admin-dashboard-refresh", "data", allow_duplicate=True),
     Input("admin-user-activate", "n_clicks"),
     Input("admin-user-suspend", "n_clicks"),
+    Input("admin-user-resend-email", "n_clicks"),
     Input("admin-user-delete", "n_clicks"),
     State("admin-users-grid", "selectedRows"),
     State("auth-user", "data"),
     State("admin-dashboard-refresh", "data"),
     prevent_initial_call=True,
 )
-def admin_user_status_action(_activate, _suspend, _delete, selected_rows, user, refresh):
+def admin_user_status_action(_activate, _suspend, _resend, _delete, selected_rows, user, refresh):
     try:
         company_id = _company_id_for_admin(user)
         user_id = _selected_user_id(selected_rows)
         action = ctx.triggered_id
         if action == "admin-user-delete":
             repository.delete_company_user(user_id, company_id)
-            return _notice("Selected user deleted."), (refresh or 0) + 1
+            return _notice("Selected user deleted."), _mail_progress(), (refresh or 0) + 1
+        if action == "admin-user-resend-email":
+            target_ids = [row.get("id") for row in (selected_rows or []) if row.get("id")] or [user_id]
+            sent = []
+            failed = []
+            for target_id in target_ids:
+                existing = repository.get_company_user(target_id, company_id)
+                if auth.normalize_role((existing or {}).get("role")) != auth.ROLE_DECLARANT:
+                    raise ValueError("Company Admin can only resend credentials for Declarant users.")
+                delivery = repository.resend_user_credentials(
+                    target_id,
+                    source="company-admin-resend",
+                    actor_role=auth.ROLE_COMPANY_ADMIN,
+                )
+                email_result = delivery.get("email_result") or {}
+                target = (delivery.get("user") or {}).get("email")
+                if email_result.get("sent"):
+                    sent.append(target or target_id)
+                else:
+                    failed.append(f"{target or target_id}: temporary password {delivery.get('temp_password')}")
+            if failed:
+                return (
+                    _notice(f"Credentials resent to {len(sent)} user(s). Some emails were not confirmed: {'; '.join(failed)}", "error"),
+                    _mail_progress(f"Resend completed with {len(failed)} email issue(s).", 100, "error"),
+                    (refresh or 0) + 1,
+                )
+            return (
+                _notice(f"Credentials resent to {len(sent)} user(s). Each user must set a new password on first login."),
+                _mail_progress(f"Mail sent to {len(sent)} user(s).", 100, "success"),
+                (refresh or 0) + 1,
+            )
         status = "SUSPENDED" if action == "admin-user-suspend" else "ACTIVE"
         updated = repository.set_company_user_status(user_id, company_id, status)
-        return _notice(f"{updated.get('email')} is now {updated.get('status')}."), (refresh or 0) + 1
+        return _notice(f"{updated.get('email')} is now {updated.get('status')}."), _mail_progress(), (refresh or 0) + 1
     except Exception as exc:  # noqa: BLE001
-        return _notice(str(exc), "error"), no_update
+        return _notice(str(exc), "error"), _mail_progress("Resend failed before mail could be sent.", 100, "error"), no_update
 
 
 @callback(
@@ -542,6 +616,7 @@ def render_admin_contracts_notifications_support(user, _refresh):
                     html.Div(
                         [
                             html.H3("Company Profile & Banking"),
+                            html.P("Shows whether the CFA profile and bank details are complete enough for operations.", className="muted section-label-copy"),
                             html.P(f"Compliance score: {summary.get('compliance_score')}%", className="admin-score"),
                             html.P(f"Missing: {', '.join(missing) if missing else 'None'}", className="muted"),
                             html.Div(
@@ -557,6 +632,7 @@ def render_admin_contracts_notifications_support(user, _refresh):
                     html.Div(
                         [
                             html.H3("Team Overview"),
+                            html.P("Summarizes company-scoped users and highlights suspended accounts that may need action.", className="muted section-label-copy"),
                             html.P(f"Company Admins: {summary.get('company_admins')}", className="muted"),
                             html.P(f"Declarants: {summary.get('declarants')}", className="muted"),
                             html.P(f"Suspended users: {summary.get('suspended_users')}", className="muted"),
@@ -566,6 +642,7 @@ def render_admin_contracts_notifications_support(user, _refresh):
                     html.Div(
                         [
                             html.H3("Notifications & Support"),
+                            html.P("Highlights unread system events and open tickets that may require company follow-up.", className="muted section-label-copy"),
                             html.P(f"Unread notifications: {summary.get('notifications_unread')}", className="muted"),
                             html.P(f"Open support tickets: {summary.get('open_tickets')}", className="muted"),
                             html.Div(
@@ -794,7 +871,7 @@ def tool_fee(_clicks, query, user):
             no_containers=int(bl.get("no_containers") or 0),
             gross_weight=float(bl.get("gross_weight") or 0),
         )
-        calc = calculate_invoice(std, "SERVICE_FEE_ONLY")
+        calc = calculate_invoice(std, "FULL_SETTLEMENT")
         return html.Div(
             [
                 html.Strong(bl.get("bl_number")),

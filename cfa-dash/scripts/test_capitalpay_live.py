@@ -28,7 +28,7 @@ for amt in ("212.40", "212.50", "213.00", "184.08", "185.00"):
         "items": [
             {
                 "account_id": 48,
-                "desc": "ZCAMS GN 83 Service Fee",
+                "desc": "ZCAMS GN 83 Agency Charge",
                 "item_ref": "ITEM-001",
                 "price": amt,
                 "quantity": "1",

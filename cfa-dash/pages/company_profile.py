@@ -52,6 +52,7 @@ def layout(**_kwargs):
                             className="modal-header",
                         ),
                         html.Div(id="profile-mail-popup-message", className="notice success"),
+                        html.Div(id="profile-mail-popup-progress", children=_mail_progress()),
                         html.Div(
                             html.Button("OK", id="profile-mail-popup-ok", className="btn-primary", type="button"),
                             className="modal-actions",
@@ -143,6 +144,10 @@ def _profile_content(company: dict, certs: list[dict], users: list[dict], score:
                 html.Div(
                     [
                         html.H3("Company Logo"),
+                            html.P(
+                                "Upload the CFA logo used for profile presentation and generated documents where applicable.",
+                                className="muted section-label-copy",
+                            ),
                         html.Div(
                             html.Img(src=logo_url, className="company-logo-preview") if logo_url
                             else html.Div("No logo uploaded", className="muted company-logo-empty"),
@@ -214,7 +219,6 @@ def _profile_content(company: dict, certs: list[dict], users: list[dict], score:
                             id="new-user-role",
                             options=[
                                 {"label": "Declarant / Agent", "value": "DECLARANT"},
-                                {"label": "Company Admin", "value": "COMPANY_ADMIN"},
                             ],
                             value="DECLARANT",
                             clearable=False,
@@ -309,6 +313,13 @@ def _profile_users_table(users: list[dict]):
                             title="Activate user" if user.get("status") == "SUSPENDED" else "Suspend user",
                         ),
                         html.Button(
+                            icon("lucide:mail-check", 17),
+                            id={"type": "profile-user-resend-email", "id": user["id"]},
+                            className="contract-action-icon email",
+                            type="button",
+                            title="Resend login credentials",
+                        ),
+                        html.Button(
                             icon("lucide:trash-2", 17),
                             id={"type": "profile-user-delete", "id": user["id"]},
                             className="contract-action-icon delete",
@@ -394,6 +405,18 @@ def _profile_documents_results(certs: list[dict], page: int | None):
 
 def _mail_popup_message(message: str, *, success: bool = True):
     return html.Div(message, className="notice success" if success else "notice error")
+
+
+def _mail_progress(label: str = "Waiting for resend action.", percent: int = 0, state: str = "idle"):
+    visible = state != "idle"
+    percent = max(0, min(100, int(percent)))
+    return html.Div(
+        [
+            html.Div([html.Span(label), html.Span(f"{percent}%")], className="mail-progress-label"),
+            html.Div(html.Div(style={"width": f"{percent}%"}, className="mail-progress-fill"), className="mail-progress-track"),
+        ],
+        className=f"mail-progress {state}{' is-visible' if visible else ''}",
+    )
 
 
 def _reset_user_form_outputs():
@@ -585,6 +608,7 @@ def profile_document_actions(
     Output("new-user-role", "value"),
     Output("create-company-user", "children"),
     Output("profile-mail-popup-message", "children"),
+    Output("profile-mail-popup-progress", "children"),
     Output("profile-mail-popup", "className"),
     Output("profile-pending-user-action", "data"),
     Output("profile-confirm-message", "children"),
@@ -593,6 +617,7 @@ def profile_document_actions(
     Input("create-company-user", "n_clicks"),
     Input({"type": "profile-user-edit", "id": ALL}, "n_clicks"),
     Input({"type": "profile-user-toggle", "id": ALL}, "n_clicks"),
+    Input({"type": "profile-user-resend-email", "id": ALL}, "n_clicks"),
     Input({"type": "profile-user-delete", "id": ALL}, "n_clicks"),
     Input("profile-mail-popup-close", "n_clicks"),
     Input("profile-mail-popup-ok", "n_clicks"),
@@ -618,6 +643,7 @@ def mutate_company_profile(
     _create_clicks,
     _edit_clicks,
     _toggle_clicks,
+    _resend_clicks,
     _delete_clicks,
     _popup_close,
     _popup_ok,
@@ -635,6 +661,7 @@ def mutate_company_profile(
     new_user_field_out = [no_update, no_update, no_update, no_update, no_update, no_update]
     button_label = no_update
     popup_message = no_update
+    popup_progress = no_update
     popup_class = no_update
     pending_action_out = no_update
     confirm_message = no_update
@@ -650,6 +677,7 @@ def mutate_company_profile(
             *new_user_field_out,
             no_update,
             no_update,
+            no_update,
             "modal-backdrop is-hidden",
             no_update,
             no_update,
@@ -661,6 +689,7 @@ def mutate_company_profile(
             no_update,
             no_update,
             *new_user_field_out,
+            no_update,
             no_update,
             no_update,
             no_update,
@@ -719,10 +748,12 @@ def mutate_company_profile(
                 if new_user.get("email_result", {}).get("sent"):
                     message += " The mail has gone with the login credentials."
                     popup_message = _mail_popup_message(message, success=True)
+                    popup_progress = _mail_progress()
                     popup_class = "modal-backdrop"
                 else:
                     message += f" Email was not confirmed, temporary password: {new_user['temp_password']}"
                     popup_message = _mail_popup_message(message, success=False)
+                    popup_progress = _mail_progress()
                     popup_class = "modal-backdrop"
                 result = html.Div(message, className="notice success")
                 new_user_field_out = _reset_user_form_outputs()
@@ -755,6 +786,35 @@ def mutate_company_profile(
                 success=False,
             )
             confirm_class = "modal-backdrop"
+    elif isinstance(trigger, dict) and trigger.get("type") == "profile-user-resend-email":
+        selected = repository.get_company_user(trigger["id"], company_id)
+        if not selected:
+            result = html.Div("Selected user was not found.", className="notice error")
+        elif repository.normalize_role(selected.get("role")) != repository.OPERATIONAL_ROLE:
+            result = html.Div("Company Admin can only resend credentials for Declarant users.", className="notice error")
+        else:
+            try:
+                delivery = repository.resend_user_credentials(
+                    trigger["id"],
+                    source="company-profile-resend",
+                    actor_role="COMPANY_ADMIN",
+                )
+            except ValueError as exc:
+                result = html.Div(str(exc), className="notice error")
+            else:
+                email_result = delivery.get("email_result") or {}
+                if email_result.get("sent"):
+                    message = f"Credentials resent to {selected.get('email')}. The user must set a new password on first login."
+                    result = html.Div(message, className="notice success")
+                    popup_message = _mail_popup_message(message, success=True)
+                    popup_progress = _mail_progress("Mail sent successfully.", 100, "success")
+                    popup_class = "modal-backdrop"
+                else:
+                    message = f"Email was not confirmed for {selected.get('email')}; temporary password: {delivery.get('temp_password')}"
+                    result = html.Div(message, className="notice error")
+                    popup_message = _mail_popup_message(message, success=False)
+                    popup_progress = _mail_progress("Resend completed, but email was not confirmed.", 100, "error")
+                    popup_class = "modal-backdrop"
     elif isinstance(trigger, dict) and trigger.get("type") == "profile-user-delete":
         selected = repository.get_company_user(trigger["id"], company_id)
         if not selected:
@@ -808,6 +868,7 @@ def mutate_company_profile(
         *new_user_field_out,
         button_label,
         popup_message,
+        popup_progress,
         popup_class,
         pending_action_out,
         confirm_message,

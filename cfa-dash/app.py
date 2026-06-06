@@ -70,7 +70,9 @@ invoice_request_modal = _reviewed_bl_module.invoice_request_modal
 PUBLIC_PATHS = auth.PUBLIC_PATHS
 WORKFLOW_HIDDEN = {
     "/super-admin",
+    "/operations",
     "/admin",
+    "/admin-support",
     "/change-password",
     "/notifications",
     "/support",
@@ -115,8 +117,8 @@ app.layout = html.Div(
         dcc.Store(id="invoice-open-request"),
         dcc.Store(id="bl-last-bl-id"),
         dcc.Store(id="invoice-settlement-pick"),
-        dcc.Store(id="invoice-modal-step", data="choose"),
-        dcc.Store(id="invoice-settlement-mode", data="SERVICE_FEE_ONLY"),
+        dcc.Store(id="invoice-modal-step", data="details"),
+        dcc.Store(id="invoice-settlement-mode", data="FULL_SETTLEMENT"),
         dcc.Store(id="detach-reviewed-id"),
         dcc.Store(id="contract-preview-id"),
         html.Div(
@@ -167,11 +169,6 @@ app.validation_layout = html.Div(
                     type="button",
                 ),
                 html.Button(
-                    id={"type": "invoice-request", "id": "__validation__", "variant": "service"},
-                    n_clicks=0,
-                    type="button",
-                ),
-                html.Button(
                     id={"type": "invoice-request", "id": "__validation__", "variant": "full"},
                     n_clicks=0,
                     type="button",
@@ -205,6 +202,13 @@ app.validation_layout = html.Div(
                 html.Button(id="profile-docs-next", n_clicks=0, type="button"),
                 html.Div(id="profile-docs-results"),
                 dcc.Store(id="profile-docs-page"),
+                html.Button(id="tutorial-prev", n_clicks=0, type="button"),
+                html.Button(id="tutorial-next", n_clicks=0, type="button"),
+                html.Button(id={"type": "tutorial-dot", "index": 0}, n_clicks=0, type="button"),
+                dcc.Store(id="tutorial-slide-index"),
+                html.Div(id="tutorial-slide-stage"),
+                html.Div(id="tutorial-progress"),
+                html.Span(id="tutorial-counter"),
             ],
         ),
     ]
@@ -216,14 +220,24 @@ app.validation_layout = html.Div(
 app.clientside_callback(
     """
     function(hashValue, pathname) {
+        const scrollRoot = document.querySelector("#page-slot .page-content");
         if (!hashValue) {
+            window.setTimeout(function() {
+                if (scrollRoot) {
+                    scrollRoot.scrollTo({top: 0, behavior: "smooth"});
+                }
+            }, 80);
             return "";
         }
         const targetId = String(hashValue).replace(/^#/, "");
         window.setTimeout(function() {
             const target = document.getElementById(targetId);
             if (target) {
-                target.scrollIntoView({behavior: "smooth", block: "start"});
+                const isAdminTools = pathname === "/admin" && targetId === "tools";
+                target.scrollIntoView({
+                    behavior: "smooth",
+                    block: isAdminTools ? "nearest" : "start"
+                });
             }
         }, 120);
         return targetId;
@@ -583,6 +597,15 @@ def agentic_extract_bl(contents, filename):
 
 
 @callback(
+    Output("agentic-full-settlement-bank-panel", "className"),
+    Input("agentic-invoice-type", "value"),
+    prevent_initial_call=False,
+)
+def toggle_agentic_bank_details(invoice_type):
+    return "agentic-bank-panel"
+
+
+@callback(
     Output("agentic-validation-result", "children", allow_duplicate=True),
     Output("agentic-run-state", "data", allow_duplicate=True),
     Output("agentic-workflow-interval", "disabled", allow_duplicate=True),
@@ -598,6 +621,9 @@ def agentic_extract_bl(contents, filename):
     State("agentic-no-containers", "value"),
     State("agentic-gn83-category", "value"),
     State("agentic-invoice-type", "value"),
+    State("agentic-beneficiary-name", "value"),
+    State("agentic-beneficiary-bank", "value"),
+    State("agentic-beneficiary-account", "value"),
     State("agentic-client-email", "value"),
     State("agentic-client-phone", "value"),
     State("agentic-share-channels", "value"),
@@ -615,6 +641,9 @@ def start_agentic_workflow(
     no_containers,
     gn83_category,
     invoice_type,
+    beneficiary_name,
+    beneficiary_bank_name,
+    beneficiary_account_number,
     email,
     phone,
     channels,
@@ -642,9 +671,29 @@ def start_agentic_workflow(
             email=email,
             phone=phone,
         )
+        if invoice_type == "FULL_SETTLEMENT":
+            missing_bank = [
+                label
+                for label, value in (
+                    ("Beneficiary / account holder", beneficiary_name),
+                    ("Bank name", beneficiary_bank_name),
+                    ("Account number", beneficiary_account_number),
+                )
+                if not str(value or "").strip()
+            ]
+            if missing_bank:
+                raise ValueError("Full Settlement requires bank details: " + ", ".join(missing_bank) + ".")
     except ValueError as exc:
         return html.Div(str(exc), className="notice error"), no_update, True, 0, no_update, no_update
     data["file_name"] = uploaded_file.get("filename")
+    if invoice_type == "FULL_SETTLEMENT":
+        data.update(
+            {
+                "beneficiary_name": str(beneficiary_name or "").strip(),
+                "beneficiary_bank_name": str(beneficiary_bank_name or "").strip(),
+                "beneficiary_account_number": str(beneficiary_account_number or "").strip(),
+            }
+        )
     run_state = {
         "run_id": uuid.uuid4().hex,
         "status": "running",
@@ -688,9 +737,12 @@ def advance_agentic_workflow(_ticks, state):
         elif active == "invoice":
             invoice = agentic_workflow.generate_agentic_invoice_for_review(
                 state["reviewed_id"],
-                invoice_type=state["data"].get("invoice_type") or "SERVICE_FEE_ONLY",
+                invoice_type="FULL_SETTLEMENT",
                 email=state.get("email"),
                 phone=state.get("phone"),
+                beneficiary_name=state["data"].get("beneficiary_name"),
+                beneficiary_bank_name=state["data"].get("beneficiary_bank_name"),
+                beneficiary_account_number=state["data"].get("beneficiary_account_number"),
                 idempotency_key=state.get("run_id"),
             )
             reviewed = repository.get_reviewed_bl(state["reviewed_id"])
@@ -702,6 +754,9 @@ def advance_agentic_workflow(_ticks, state):
                 "email": state.get("email"),
                 "phone": state.get("phone"),
                 "channels": state.get("channels") or ["WHATSAPP"],
+                "beneficiary_name": invoice.get("beneficiary_name"),
+                "beneficiary_bank_name": invoice.get("beneficiary_bank_name"),
+                "beneficiary_account_number": invoice.get("beneficiary_account_number"),
                 "run_id": state.get("run_id"),
             }
             completed.append("invoice")
@@ -842,6 +897,15 @@ def _agentic_human_review_panel(summary: dict, review_data: dict):
                     html.Div([html.Span("Client phone"), html.Strong(review_data.get("phone") or "-")]),
                     html.Div([html.Span("Channels"), html.Strong(channels or "-")]),
                     html.Div([html.Span("Invoice total"), html.Strong(repository.money(summary.get("total") or 0))]),
+                    *(
+                        [
+                            html.Div([html.Span("Beneficiary"), html.Strong(summary.get("beneficiary_name") or "-")]),
+                            html.Div([html.Span("Bank"), html.Strong(summary.get("beneficiary_bank_name") or "-")]),
+                            html.Div([html.Span("Account"), html.Strong(summary.get("beneficiary_account_number") or "-")]),
+                        ]
+                        if summary.get("invoice_type") == "FULL_SETTLEMENT"
+                        else []
+                    ),
                 ],
                 className="agentic-summary-grid",
             ),
@@ -897,6 +961,14 @@ def _agentic_summary_grid(summary: dict):
             html.Div([html.Span("GN 83"), html.Strong(f"{summary.get('gn83_category')} · {summary.get('units')} unit(s)")]),
             html.Div([html.Span("Total"), html.Strong(repository.money(summary.get("total") or 0))]),
             html.Div([html.Span("Email"), html.Strong(email_status)]),
+            *(
+                [
+                    html.Div([html.Span("Settlement bank"), html.Strong(summary.get("beneficiary_bank_name") or "-")]),
+                    html.Div([html.Span("Settlement account"), html.Strong(summary.get("beneficiary_account_number") or "-")]),
+                ]
+                if summary.get("invoice_type") == "FULL_SETTLEMENT"
+                else []
+            ),
         ],
         className="agentic-summary-grid",
     )

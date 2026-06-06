@@ -37,8 +37,8 @@ def layout(**_kwargs):
                             html.H2("Payment register"),
                             html.P(
                                 "All ZCAMS invoices for your company with BL, Z-SAD, amount due, "
-                                "CapitalPay reference, and payment actions.",
-                                className="muted",
+                                "CapitalPay reference, payment link actions, PDF access, and settlement status.",
+                                className="muted section-lead",
                             ),
                             html.Div(id="checkout-invoice-table"),
                         ],

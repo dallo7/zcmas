@@ -6,12 +6,12 @@ from dash import ALL, Input, Output, State, callback, clientside_callback, ctx, 
 from dash.exceptions import PreventUpdate
 
 from components.icons import icon
-from components.layout import header
+from components.layout import header, section_label
 from components.ui import badge, status_table
 from components.workflow import next_step_banner, shortcut_chip
 from services import repository
 from services.db import UPLOAD_DIR
-from services.gn83 import gn83_quote_for_reviewed
+from services.gn83 import all_category_options, gn83_quote_for_reviewed, is_gn83_exempt, lookup_fee, unit_label
 
 
 # File-based logger for the invoice request flow so failures are persisted
@@ -33,7 +33,6 @@ register_page(__name__, path="/reviewed-bl", name="Reviewed BL")
 
 
 def layout(**_kwargs):
-    bls = repository.list_bls()
     reviewed = repository.list_reviewed_bls()
     reviewed_history = repository.list_reviewed_bls(include_cancelled=True)
     return html.Div(
@@ -47,6 +46,8 @@ def layout(**_kwargs):
                 help_text="Review uploaded BLs, manage single-use Z-SAD numbers, replace Z-SADs when corrections are needed, and move records to invoicing.",
                 pathname="/reviewed-bl",
             ),
+            dcc.Store(id="active-reviewed-bl-search-store", storage_type="session"),
+            dcc.Store(id="asycuda-correction-reviewed-id"),
             html.Div(
                 [
                     html.Div(id="review-action-result"),
@@ -55,13 +56,6 @@ def layout(**_kwargs):
                     # Dash cannot update components that are absent from the active page.
                     html.Div(id="bl-result", style={"display": "none"}),
                     html.Div(id="bl-table", style={"display": "none"}),
-                    html.Div(
-                        [
-                            html.H2("BLs Awaiting Review"),
-                            html.Div(id="awaiting-review-table", children=_awaiting_table(bls)),
-                        ],
-                        className="card section-card",
-                    ),
                     html.Div(
                         [
                             html.Div(
@@ -75,7 +69,26 @@ def layout(**_kwargs):
                                 ],
                                 className="section-heading-block",
                             ),
-                            html.Div(id="reviewed-bl-table", children=_reviewed_table(reviewed)),
+                            dcc.Input(
+                                id="active-reviewed-bl-search",
+                                className="form-control invoice-register-search",
+                                placeholder="Search active reviewed BLs by BL Number",
+                                debounce=False,
+                                persistence=True,
+                                persistence_type="session",
+                            ),
+                            section_label(
+                                "Active Z-SAD Worklist",
+                                "Search reviewed BLs by BL number, then request invoices, replace BLs, or issue release when payment rules allow.",
+                                "lucide:file-check-2",
+                            ),
+                            html.Div(
+                                id="reviewed-bl-table",
+                                children=html.Div(
+                                    id="active-reviewed-bl-search-results",
+                                    children=_reviewed_table(reviewed),
+                                ),
+                            ),
                         ],
                         id="active-reviewed-bls",
                         className="card section-card",
@@ -84,6 +97,11 @@ def layout(**_kwargs):
                         [
                             html.H2("Z-SAD & Invoice History"),
                             html.P("Superseded Z-SAD numbers and cancelled invoices remain in the audit trail.", className="muted section-lead"),
+                            section_label(
+                                "Retired Records",
+                                "Use this read-only register to confirm old Z-SADs and cancelled invoices remain traceable after corrections.",
+                                "lucide:history",
+                            ),
                             html.Div(id="zsad-history-table", children=_zsad_history_table(reviewed_history)),
                         ],
                         className="card section-card",
@@ -98,24 +116,27 @@ def layout(**_kwargs):
                 ],
                 className="page-content stack",
             ),
+            _asycuda_correction_modal(),
         ]
     )
 
 
-def _awaiting_table(bls):
-    pending = [bl for bl in bls if bl["status"] == "UPLOADED"]
-    return status_table(
-        ["BL Number", "Route", "Consignee", "Action"],
-        [
-            [
-                bl["bl_number"],
-                bl["route_type"],
-                bl.get("consignee_name") or "-",
-                html.Button("Review & Issue Z-SAD", id={"type": "review-bl", "id": bl["id"]}, className="btn-secondary"),
-            ]
-            for bl in pending
-        ],
+def _gn83_dynamic_values(route_type, transport_mode, category, no_containers, gross_weight) -> tuple[str, float]:
+    selected_category = category or "MOTOR_VEHICLE"
+    return (
+        unit_label(selected_category),
+        lookup_fee(
+            route_type or "Import",
+            transport_mode or "Sea",
+            selected_category,
+            no_containers=no_containers,
+            gross_weight=gross_weight,
+        ),
     )
+
+
+def _normalize_bl_search(value: str | None) -> str:
+    return "".join(ch for ch in str(value or "").upper() if ch.isalnum())
 
 
 def _zsad_active_badge(item: dict) -> html.Span:
@@ -124,7 +145,16 @@ def _zsad_active_badge(item: dict) -> html.Span:
     return html.Span("Superseded", className="badge badge-applied")
 
 
-def _reviewed_table(reviewed):
+def _reviewed_table(reviewed, search_value: str | None = None):
+    query = _normalize_bl_search(search_value)
+    if query:
+        reviewed = [
+            item
+            for item in reviewed
+            if query in _normalize_bl_search(item.get("bl_number"))
+            or query in _normalize_bl_search(item.get("display_bl_number"))
+        ]
+
     def latest_invoice(item: dict) -> dict:
         return repository.row(
             """
@@ -159,29 +189,90 @@ def _reviewed_table(reviewed):
     )
 
 
+def _active_reviewed_search_results(reviewed, search_value: str | None = None):
+    return html.Div(
+        id="active-reviewed-bl-search-results",
+        children=_reviewed_table(reviewed, search_value),
+    )
+
+
+def _first_cargo(bl: dict) -> dict:
+    cargo_items = bl.get("cargo_items") or []
+    return cargo_items[0] if cargo_items else {}
+
+
+def _correction_payload(
+    bl_number,
+    doc_type,
+    route_type,
+    transport_mode,
+    zra_regime,
+    company_name,
+    consignee_name,
+    consignee_tin,
+    consignor_tin,
+    origin,
+    destination,
+    no_containers,
+    gross_weight,
+    gn83_category,
+    gn83_unit,
+    gn83_fee_usd,
+    cargo_description,
+) -> dict:
+    return {
+        "bl_number": bl_number,
+        "doc_type": doc_type,
+        "route_type": route_type,
+        "transport_mode": transport_mode,
+        "zra_regime": zra_regime,
+        "company_name": company_name,
+        "consignee_name": consignee_name,
+        "consignee_tin": consignee_tin,
+        "consignor_tin": consignor_tin,
+        "origin": origin,
+        "destination": destination,
+        "no_containers": int(no_containers or 0),
+        "gross_weight": gross_weight or 0,
+        "gn83_category": gn83_category,
+        "gn83_unit": gn83_unit,
+        "gn83_fee_usd": gn83_fee_usd,
+        "cargo_description": cargo_description or "General cargo",
+    }
+
+
+def _asycuda_reference(reviewed: dict) -> html.Div:
+    return html.Div(
+        [
+            html.Div([html.Span("Current Z-SAD"), html.Strong(reviewed.get("z_sad_number") or "-")]),
+            html.Div([html.Span("BL"), html.Strong(reviewed.get("bl_number") or "-")]),
+            html.Div([html.Span("Status"), html.Strong((reviewed.get("status") or "-").replace("_", " ").title())]),
+        ],
+        className="operations-confirm-grid",
+    )
+
+
 def _reviewed_actions(item: dict, invoice: dict):
     has_active_zsad = bool(item.get("z_sad_number")) and int(item.get("is_active") or 0) == 1
-    can_invoice = has_active_zsad and item["status"] not in {"CARGO_RELEASED", "CANCELLED"}
-    pay_href = repository.invoice_pay_url(invoice) if invoice else None
+    exempt = is_gn83_exempt(item.get("gn83_category"))
+    can_invoice = has_active_zsad and item["status"] not in {"CARGO_RELEASED", "CANCELLED"} and not exempt
+    can_release = item["status"] == "SETTLED_RELEASE_PENDING" or (
+        exempt and has_active_zsad and item["status"] == "REVIEWED_ZSAD_ISSUED"
+    )
     return html.Div(
         [
             html.Button(
-                "Service",
-                id={"type": "invoice-request", "id": item["id"], "variant": "service"},
+                "Full Settlement",
+                id={"type": "invoice-request", "id": item["id"], "variant": "full"},
                 className="btn-primary",
                 type="button",
                 n_clicks=0,
                 disabled=not can_invoice,
-                title="Generate GN 83 service-fee invoice",
-            ),
-            html.Button(
-                "Full Settlement",
-                id={"type": "invoice-request", "id": item["id"], "variant": "full"},
-                className="btn-secondary",
-                type="button",
-                n_clicks=0,
-                disabled=not can_invoice,
-                title="Generate GN 83 full-settlement invoice",
+                title=(
+                    "GN 83 exempt — Z-SAD only, no settlement invoice"
+                    if exempt
+                    else "Generate GN 83 full-settlement invoice"
+                ),
             ),
             html.Button(
                 "Replace BL",
@@ -193,25 +284,36 @@ def _reviewed_actions(item: dict, invoice: dict):
                 title="Retire active Z-SAD, cancel open invoices, and cancel this BL so it can be uploaded again",
             ),
             html.Button(
+                "ASYCUDA Correction",
+                id={"type": "asycuda-correction-open", "id": item["id"]},
+                className="btn-secondary",
+                type="button",
+                n_clicks=0,
+                disabled=not has_active_zsad or item["status"] not in {"REVIEWED_ZSAD_ISSUED", "AWAITING_PAYMENT"},
+                title="Edit BL values after ASYCUDA feedback and keep the same active Z-SAD for resend",
+            ),
+            html.Button(
                 "Issue Release",
                 id={"type": "issue-release", "id": item["id"]},
                 className="btn-secondary",
                 type="button",
                 n_clicks=0,
-                disabled=item["status"] != "SETTLED_RELEASE_PENDING",
+                disabled=not can_release,
+                title=(
+                    "GN 83 exempt cargo can be released after Z-SAD issue"
+                    if exempt
+                    else "Issue cargo release after settlement"
+                ),
             ),
-            html.A(
-                "Pay",
-                href=pay_href or "/checkout",
-                target="_blank" if pay_href else None,
-                className="btn-secondary",
-                title="Open CapitalPay checkout" if pay_href else "Open Check-out register",
-            )
-            if item["status"] == "AWAITING_PAYMENT" or pay_href
-            else None,
         ],
-        className="row-actions wrap",
+        className="row-actions wrap reviewed-bl-actions",
     )
+
+
+def _invoice_type_label(invoice_type: str | None) -> str:
+    if invoice_type == "FULL_SETTLEMENT":
+        return "Full Settlement"
+    return "Legacy Invoice"
 
 
 def _zsad_history_table(reviewed):
@@ -292,6 +394,143 @@ def detach_zsad_modal():
     )
 
 
+def _correction_field(label: str, control, *, span: int = 1) -> html.Div:
+    style = {"gridColumn": f"span {span}"} if span > 1 else None
+    return html.Div([html.Label(label), control], className="form-field", style=style)
+
+
+def _asycuda_correction_modal():
+    return html.Div(
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.H2("ASYCUDA BL Correction"),
+                        html.Button("x", id="asycuda-correction-close", className="modal-close", title="Close"),
+                    ],
+                    className="modal-header",
+                ),
+                html.Div(
+                    [
+                        html.P(
+                            "Use this when ASYCUDA asks for a corrected BL value after a Z-SAD has already been issued. "
+                            "ZCAMS will keep the same active Z-SAD number, update its linked BL values, and cancel open invoices that used the previous values.",
+                            className="section-lead",
+                        ),
+                        html.Div(id="asycuda-correction-reference", className="invoice-reference-card"),
+                        html.Div(
+                            [
+                                _correction_field("BL Number", dcc.Input(id="asycuda-bl-number", className="form-control")),
+                                _correction_field(
+                                    "Document type",
+                                    dcc.Dropdown(
+                                        id="asycuda-doc-type",
+                                        options=[
+                                            {"label": v, "value": v}
+                                            for v in ["Bill of Lading", "Air Waybill", "Road Consignment", "Export"]
+                                        ],
+                                        className="zcams-dropdown",
+                                        clearable=False,
+                                    ),
+                                ),
+                                _correction_field(
+                                    "Route",
+                                    dcc.Dropdown(
+                                        id="asycuda-route-type",
+                                        options=[{"label": v, "value": v} for v in ["Import", "Export", "Transit"]],
+                                        className="zcams-dropdown",
+                                        clearable=False,
+                                    ),
+                                ),
+                                _correction_field(
+                                    "Transport mode",
+                                    dcc.Dropdown(
+                                        id="asycuda-transport-mode",
+                                        options=[{"label": v, "value": v} for v in ["Sea", "Road", "Rail", "Air"]],
+                                        className="zcams-dropdown",
+                                        clearable=False,
+                                    ),
+                                ),
+                                _correction_field("ZRA regime", dcc.Input(id="asycuda-zra-regime", className="form-control")),
+                                _correction_field("Company name", dcc.Input(id="asycuda-company-name", className="form-control")),
+                                _correction_field("Consignee", dcc.Input(id="asycuda-consignee-name", className="form-control")),
+                                _correction_field("Consignee TIN", dcc.Input(id="asycuda-consignee-tin", className="form-control")),
+                                _correction_field("Consignor TIN", dcc.Input(id="asycuda-consignor-tin", className="form-control")),
+                                _correction_field("Origin", dcc.Input(id="asycuda-origin", className="form-control")),
+                                _correction_field("Destination", dcc.Input(id="asycuda-destination", className="form-control")),
+                                _correction_field(
+                                    "No. of containers",
+                                    dcc.Input(id="asycuda-no-containers", type="number", min=0, className="form-control"),
+                                ),
+                                _correction_field(
+                                    "Gross weight (MT)",
+                                    dcc.Input(id="asycuda-gross-weight", type="number", min=0, className="form-control"),
+                                ),
+                                _correction_field(
+                                    "GN 83 category",
+                                    dcc.Dropdown(
+                                        id="asycuda-gn83-category",
+                                        options=all_category_options(),
+                                        className="zcams-dropdown",
+                                        clearable=False,
+                                    ),
+                                    span=2,
+                                ),
+                                _correction_field("GN 83 unit", dcc.Input(id="asycuda-gn83-unit", className="form-control")),
+                                _correction_field(
+                                    "GN 83 fee USD",
+                                    dcc.Input(id="asycuda-gn83-fee-usd", type="number", min=0, className="form-control"),
+                                ),
+                                _correction_field(
+                                    "Cargo description",
+                                    dcc.Textarea(id="asycuda-cargo-description", className="form-control", style={"minHeight": "90px"}),
+                                    span=2,
+                                ),
+                            ],
+                            className="bl-capture-grid",
+                        ),
+                        html.Div(
+                            [
+                                html.Label("ASYCUDA correction reason"),
+                                dcc.Textarea(
+                                    id="asycuda-correction-reason",
+                                    className="form-control",
+                                    placeholder="Example: ASYCUDA requested consignee TIN correction before declaration resend.",
+                                    style={"minHeight": "80px"},
+                                ),
+                            ],
+                            className="form-field",
+                        ),
+                        dcc.Checklist(
+                            id="asycuda-correction-confirm",
+                            options=[
+                                {
+                                    "label": "I confirm open invoices can be cancelled and this same active Z-SAD can be resent with corrected BL values.",
+                                    "value": "CONFIRMED",
+                                }
+                            ],
+                            value=[],
+                            className="invoice-confirm-check",
+                        ),
+                        html.Div(id="asycuda-correction-result"),
+                    ],
+                    className="stack",
+                ),
+                html.Div(
+                    [
+                        html.Button("Cancel", id="asycuda-correction-close-secondary", className="btn-secondary"),
+                        html.Button("Save correction for same Z-SAD", id="asycuda-correction-submit", className="btn-primary"),
+                    ],
+                    className="modal-actions",
+                ),
+            ],
+            className="invoice-modal-card detach-modal-card",
+        ),
+        id="asycuda-correction-modal",
+        className="modal-backdrop is-hidden",
+    )
+
+
 def _detach_preview_body(preview: dict) -> list:
     if not preview.get("can_detach"):
         return [
@@ -365,7 +604,7 @@ def _detach_preview_body(preview: dict) -> list:
                     [
                         [
                             inv["invoice_number"],
-                            inv["invoice_type"].replace("_", " ").title(),
+                            _invoice_type_label(inv.get("invoice_type")),
                             badge(inv["status"]),
                             repository.money(inv.get("total")),
                         ]
@@ -528,31 +767,11 @@ def _invoice_modal_open_outputs(reviewed_id: str, variant: str = "choose"):
     reviewed = repository.get_reviewed_bl(reviewed_id)
     if not reviewed:
         raise PreventUpdate
+    cargo = (reviewed.get("cargo_items") or [{}])[0]
+    if is_gn83_exempt(cargo.get("gn83_category")):
+        raise PreventUpdate
     minimum = minimum_invoice_amount(reviewed)
-    if variant == "service":
-        return (
-            {"id": reviewed_id, "minimum": minimum},
-            "modal-backdrop",
-            _MODAL_VISIBLE,
-            "details",
-            _CHOOSE_HIDDEN,
-            _DETAILS_VISIBLE,
-            _SUBMIT_VISIBLE,
-            "SERVICE_FEE_ONLY",
-            "Service Fee Only",
-            minimum,
-            "",
-            "",
-            "",
-            [],
-            "",
-            "",
-            ["WHATSAPP"],
-            None,
-            None,
-            None,
-        )
-    if variant == "full":
+    if variant in {"full", "choose"}:
         return (
             {"id": reviewed_id, "minimum": minimum},
             "modal-backdrop",
@@ -575,28 +794,7 @@ def _invoice_modal_open_outputs(reviewed_id: str, variant: str = "choose"):
             None,
             None,
         )
-    return (
-        {"id": reviewed_id, "minimum": minimum},
-        "modal-backdrop",
-        _MODAL_VISIBLE,
-        "choose",
-        _CHOOSE_VISIBLE,
-        _DETAILS_HIDDEN,
-        _SUBMIT_HIDDEN,
-        "SERVICE_FEE_ONLY",
-        "",
-        minimum,
-        "",
-        "",
-        "",
-        [],
-        "",
-        "",
-        ["WHATSAPP"],
-        None,
-        None,
-        None,
-    )
+    raise PreventUpdate
 
 
 def invoice_request_modal():
@@ -620,24 +818,13 @@ def invoice_request_modal():
                 ),
                 html.Div(
                     [
-                        html.H3("Choose settlement type"),
+                        html.H3("Full Settlement invoice"),
                         html.P(
-                            "Select Service Fee Only or Full Settlement. You will complete the invoice details, "
-                            "then download and share with the importer.",
+                            "ZCAMS now supports Full Settlement invoices only. Complete the invoice details, then download and share with the importer.",
                             className="muted section-lead",
                         ),
                         html.Div(
                             [
-                                html.Button(
-                                    [
-                                        html.Strong("Service Fee Only"),
-                                        html.Span("GN 83 admin fee (20%) plus VAT on the fee."),
-                                    ],
-                                    id="invoice-pick-service",
-                                    className="settlement-option-card",
-                                    type="button",
-                                    n_clicks=0,
-                                ),
                                 html.Button(
                                     [
                                         html.Strong("Full Settlement"),
@@ -660,10 +847,11 @@ def invoice_request_modal():
                         html.Div(
                             [
                                 html.Button(
-                                    [icon("lucide:arrow-left", 14), "Change settlement type"],
+                                    [icon("lucide:landmark", 14), "Full Settlement"],
                                     id="invoice-back-to-mode",
                                     className="btn-secondary settlement-back-btn",
                                     n_clicks=0,
+                                    disabled=True,
                                 ),
                                 html.Span(id="invoice-settlement-label", className="settlement-mode-pill"),
                             ],
@@ -808,40 +996,255 @@ def invoice_request_modal():
     )
 
 
-def _refresh_reviewed_views():
-    bls = repository.list_bls()
+def _refresh_reviewed_views(active_reviewed_search: str | None = None):
     reviewed = repository.list_reviewed_bls()
     reviewed_history = repository.list_reviewed_bls(include_cancelled=True)
-    return _awaiting_table(bls), _reviewed_table(reviewed), _zsad_history_table(reviewed_history)
+    return (
+        _active_reviewed_search_results(reviewed, active_reviewed_search),
+        _zsad_history_table(reviewed_history),
+    )
+
+
+@callback(
+    Output("active-reviewed-bl-search-results", "children"),
+    Output("active-reviewed-bl-search-store", "data"),
+    Input("active-reviewed-bl-search", "value"),
+    Input("_pages_location", "pathname"),
+    State("active-reviewed-bl-search-store", "data"),
+    prevent_initial_call=True,
+)
+def live_filter_active_reviewed_bls(search_value, pathname, stored_search):
+    if (pathname or "") != "/reviewed-bl":
+        raise PreventUpdate
+    effective_search = stored_search if search_value is None else search_value
+    return _reviewed_table(repository.list_reviewed_bls(), effective_search), effective_search
+
+
+@callback(
+    Output("asycuda-correction-reviewed-id", "data"),
+    Output("asycuda-correction-modal", "className"),
+    Output("asycuda-correction-reference", "children"),
+    Output("asycuda-bl-number", "value"),
+    Output("asycuda-doc-type", "value"),
+    Output("asycuda-route-type", "value"),
+    Output("asycuda-transport-mode", "value"),
+    Output("asycuda-zra-regime", "value"),
+    Output("asycuda-company-name", "value"),
+    Output("asycuda-consignee-name", "value"),
+    Output("asycuda-consignee-tin", "value"),
+    Output("asycuda-consignor-tin", "value"),
+    Output("asycuda-origin", "value"),
+    Output("asycuda-destination", "value"),
+    Output("asycuda-no-containers", "value"),
+    Output("asycuda-gross-weight", "value"),
+    Output("asycuda-gn83-category", "value"),
+    Output("asycuda-gn83-unit", "value"),
+    Output("asycuda-gn83-fee-usd", "value"),
+    Output("asycuda-cargo-description", "value"),
+    Output("asycuda-correction-reason", "value"),
+    Output("asycuda-correction-confirm", "value"),
+    Output("asycuda-correction-result", "children"),
+    Input({"type": "asycuda-correction-open", "id": ALL}, "n_clicks"),
+    Input("asycuda-correction-close", "n_clicks"),
+    Input("asycuda-correction-close-secondary", "n_clicks"),
+    State({"type": "asycuda-correction-open", "id": ALL}, "id"),
+    prevent_initial_call=True,
+)
+def toggle_asycuda_correction_modal(open_clicks, _close, _close_secondary, correction_ids):
+    trigger = ctx.triggered_id
+    if isinstance(trigger, str) and trigger in {"asycuda-correction-close", "asycuda-correction-close-secondary"}:
+        return (None, "modal-backdrop is-hidden") + (no_update,) * 21
+    if not isinstance(trigger, dict):
+        return (no_update,) * 23
+    clicked_id = trigger.get("id")
+    clicked_count = 0
+    for button_id, clicks in zip(correction_ids or [], open_clicks or []):
+        if clicks and button_id.get("id") == clicked_id:
+            clicked_count = clicks
+            break
+    if not clicked_id or not clicked_count:
+        raise PreventUpdate
+    reviewed = repository.get_reviewed_bl(clicked_id)
+    if not reviewed:
+        return (None, "modal-backdrop is-hidden", html.Div("Reviewed BL was not found.", className="notice error")) + (no_update,) * 20
+    bl = repository.get_bl(reviewed["bl_id"])
+    cargo = _first_cargo(bl)
+    return (
+        clicked_id,
+        "modal-backdrop",
+        _asycuda_reference(reviewed),
+        bl.get("bl_number") or "",
+        bl.get("doc_type") or "Bill of Lading",
+        bl.get("route_type") or "Import",
+        bl.get("transport_mode") or "Sea",
+        bl.get("zra_regime") or "IM4 Home Use",
+        bl.get("company_name") or "",
+        bl.get("consignee_name") or "",
+        bl.get("consignee_tin") or "",
+        bl.get("consignor_tin") or "",
+        bl.get("origin") or "",
+        bl.get("destination") or "",
+        bl.get("no_containers") or 0,
+        bl.get("gross_weight") or 0,
+        cargo.get("gn83_category") or "MOTOR_VEHICLE",
+        bl.get("gn83_unit") or cargo.get("unit") or "",
+        bl.get("gn83_fee_usd") or cargo.get("min_fee_usd") or 0,
+        cargo.get("description") or "General cargo",
+        "",
+        [],
+        None,
+    )
+
+
+@callback(
+    Output("asycuda-gn83-unit", "value", allow_duplicate=True),
+    Output("asycuda-gn83-fee-usd", "value", allow_duplicate=True),
+    Input("asycuda-route-type", "value"),
+    Input("asycuda-transport-mode", "value"),
+    Input("asycuda-gn83-category", "value"),
+    Input("asycuda-no-containers", "value"),
+    Input("asycuda-gross-weight", "value"),
+    prevent_initial_call=True,
+)
+def recalculate_asycuda_gn83_fee(route_type, transport_mode, category, no_containers, gross_weight):
+    return _gn83_dynamic_values(route_type, transport_mode, category, no_containers, gross_weight)
 
 
 @callback(
     Output("review-action-result", "children"),
-    Output("awaiting-review-table", "children"),
     Output("reviewed-bl-table", "children"),
     Output("zsad-history-table", "children"),
-    Input({"type": "review-bl", "id": ALL}, "n_clicks"),
     Input({"type": "issue-release", "id": ALL}, "n_clicks"),
+    State("active-reviewed-bl-search", "value"),
     prevent_initial_call=True,
 )
-def reviewed_row_actions(*_clicks):
+def reviewed_row_actions(_release_clicks, active_reviewed_search):
     from dash import ctx
 
     trigger = ctx.triggered_id
     if not isinstance(trigger, dict):
-        return no_update, no_update, no_update, no_update
+        return no_update, no_update, no_update
     action = trigger["type"]
     target = trigger["id"]
-    if action == "review-bl":
-        reviewed = repository.review_bl(target)
-        notice = html.Div(f"Z-SAD issued: {reviewed['z_sad_number']}", className="notice success")
-    elif action == "issue-release":
-        repository.issue_cargo_release(target)
+    if action == "issue-release":
+        try:
+            repository.issue_cargo_release(target)
+        except ValueError as exc:
+            table, history = _refresh_reviewed_views(active_reviewed_search)
+            return html.Div(str(exc), className="notice error"), table, history
         notice = html.Div("Cargo release issued.", className="notice success")
     else:
-        return no_update, no_update, no_update, no_update
-    awaiting, table, history = _refresh_reviewed_views()
-    return notice, awaiting, table, history
+        return no_update, no_update, no_update
+    table, history = _refresh_reviewed_views(active_reviewed_search)
+    return notice, table, history
+
+
+@callback(
+    Output("asycuda-correction-result", "children", allow_duplicate=True),
+    Output("review-action-result", "children", allow_duplicate=True),
+    Output("reviewed-bl-table", "children", allow_duplicate=True),
+    Output("zsad-history-table", "children", allow_duplicate=True),
+    Output("asycuda-correction-modal", "className", allow_duplicate=True),
+    Output("asycuda-correction-reviewed-id", "data", allow_duplicate=True),
+    Input("asycuda-correction-submit", "n_clicks"),
+    State("asycuda-correction-reviewed-id", "data"),
+    State("asycuda-bl-number", "value"),
+    State("asycuda-doc-type", "value"),
+    State("asycuda-route-type", "value"),
+    State("asycuda-transport-mode", "value"),
+    State("asycuda-zra-regime", "value"),
+    State("asycuda-company-name", "value"),
+    State("asycuda-consignee-name", "value"),
+    State("asycuda-consignee-tin", "value"),
+    State("asycuda-consignor-tin", "value"),
+    State("asycuda-origin", "value"),
+    State("asycuda-destination", "value"),
+    State("asycuda-no-containers", "value"),
+    State("asycuda-gross-weight", "value"),
+    State("asycuda-gn83-category", "value"),
+    State("asycuda-gn83-unit", "value"),
+    State("asycuda-gn83-fee-usd", "value"),
+    State("asycuda-cargo-description", "value"),
+    State("asycuda-correction-reason", "value"),
+    State("asycuda-correction-confirm", "value"),
+    State("active-reviewed-bl-search", "value"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def submit_asycuda_correction(
+    clicks,
+    reviewed_id,
+    bl_number,
+    doc_type,
+    route_type,
+    transport_mode,
+    zra_regime,
+    company_name,
+    consignee_name,
+    consignee_tin,
+    consignor_tin,
+    origin,
+    destination,
+    no_containers,
+    gross_weight,
+    gn83_category,
+    gn83_unit,
+    gn83_fee_usd,
+    cargo_description,
+    correction_reason,
+    confirmed,
+    active_reviewed_search,
+    user,
+):
+    if not clicks:
+        raise PreventUpdate
+    if not reviewed_id:
+        return html.Div("Open a reviewed BL before submitting a correction.", className="notice error"), no_update, no_update, no_update, no_update, no_update
+    if "CONFIRMED" not in (confirmed or []):
+        return html.Div("Confirm the ASYCUDA correction before reissuing the Z-SAD.", className="notice error"), no_update, no_update, no_update, no_update, reviewed_id
+    payload = _correction_payload(
+        bl_number,
+        doc_type,
+        route_type,
+        transport_mode,
+        zra_regime,
+        company_name,
+        consignee_name,
+        consignee_tin,
+        consignor_tin,
+        origin,
+        destination,
+        no_containers,
+        gross_weight,
+        gn83_category,
+        gn83_unit,
+        gn83_fee_usd,
+        cargo_description,
+    )
+    company_id = (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    try:
+        updated = repository.correct_reviewed_bl_for_asycuda(
+            reviewed_id,
+            payload,
+            correction_reason=correction_reason,
+            company_id=company_id,
+            actor_id=(user or {}).get("id"),
+        )
+    except ValueError as exc:
+        return html.Div(str(exc), className="notice error"), no_update, no_update, no_update, no_update, reviewed_id
+    summary = updated.get("asycuda_correction_summary") or {}
+    notice = html.Div(
+        [
+            html.Strong("BL corrected for the existing Z-SAD."),
+            html.P(
+                f"Z-SAD {summary.get('zsad_number') or updated.get('z_sad_number') or '-'} remains active and is ready to resend to ASYCUDA with the corrected BL values."
+            ),
+            html.P(f"Cancelled invoices: {summary.get('cancelled_count') or 0}.", className="muted"),
+        ],
+        className="notice success",
+    )
+    table, history = _refresh_reviewed_views(active_reviewed_search)
+    return None, notice, table, history, "modal-backdrop is-hidden", None
 
 
 @callback(
@@ -913,7 +1316,6 @@ def enable_detach_submit(confirmed, reviewed_id):
 
 @callback(
     Output("review-action-result", "children", allow_duplicate=True),
-    Output("awaiting-review-table", "children", allow_duplicate=True),
     Output("reviewed-bl-table", "children", allow_duplicate=True),
     Output("zsad-history-table", "children", allow_duplicate=True),
     Output("detach-zsad-modal", "className", allow_duplicate=True),
@@ -922,16 +1324,16 @@ def enable_detach_submit(confirmed, reviewed_id):
     Input("detach-modal-submit", "n_clicks"),
     State("detach-reviewed-id", "data"),
     State("detach-confirm-check", "value"),
+    State("active-reviewed-bl-search", "value"),
     prevent_initial_call=True,
 )
-def submit_detach_zsad(_clicks, reviewed_id, confirmed):
+def submit_detach_zsad(_clicks, reviewed_id, confirmed, active_reviewed_search):
     if not reviewed_id:
-        return (no_update,) * 7
+        return (no_update,) * 6
     if "CONFIRMED" not in (confirmed or []):
         preview = repository.get_zsad_detach_preview(reviewed_id)
         return (
             html.Div("Confirm BL replacement before continuing.", className="notice error"),
-            no_update,
             no_update,
             no_update,
             "modal-backdrop",
@@ -946,15 +1348,13 @@ def submit_detach_zsad(_clicks, reviewed_id, confirmed):
             html.Div(str(exc), className="notice error"),
             no_update,
             no_update,
-            no_update,
             "modal-backdrop",
             reviewed_id,
             _detach_preview_body(preview),
         )
-    awaiting, table, history = _refresh_reviewed_views()
+    table, history = _refresh_reviewed_views(active_reviewed_search)
     return (
         _detach_success_notice(updated),
-        awaiting,
         table,
         history,
         "modal-backdrop is-hidden",
@@ -1011,6 +1411,9 @@ def toggle_invoice_modal(_bl_request_clicks, bl_id, user, *_legacy_args):
     trigger = ctx.triggered_id
     if trigger is None:
         raise PreventUpdate
+    triggered_value = (ctx.triggered or [{}])[0].get("value")
+    if not triggered_value:
+        raise PreventUpdate
     if isinstance(trigger, dict) and trigger.get("type") == "invoice-request":
         return _invoice_modal_open_outputs(trigger["id"], trigger.get("variant", "choose")) + (no_update, no_update)
     if trigger == "bl-request-invoice":
@@ -1037,12 +1440,19 @@ def toggle_invoice_modal(_bl_request_clicks, bl_id, user, *_legacy_args):
             except Exception:
                 table = no_update
 
+        cargo = (reviewed.get("cargo_items") or [{}])[0]
         zsad = reviewed.get("z_sad_number") or "issued"
+        if is_gn83_exempt(cargo.get("gn83_category")):
+            notice = html.Div(
+                f"Z-SAD {zsad} issued. GN 83 exempt cargo — no settlement invoice required.",
+                className="notice success",
+            )
+            return (no_update,) * 20 + (table, notice)
         notice = html.Div(
-            f"Z-SAD {zsad} issued. Choose Service Fee Only or Full Settlement.",
+            f"Z-SAD {zsad} issued. Complete the Full Settlement invoice details.",
             className="notice success",
         )
-        return _invoice_modal_open_outputs(reviewed["id"], "choose") + (table, notice)
+        return _invoice_modal_open_outputs(reviewed["id"], "full") + (table, notice)
     raise PreventUpdate
 
 
@@ -1120,23 +1530,18 @@ def open_reviewed_invoice_modal(_invoice_clicks):
     Output("invoice-request-submit", "style", allow_duplicate=True),
     Output("invoice-settlement-mode", "data", allow_duplicate=True),
     Output("invoice-settlement-label", "children", allow_duplicate=True),
-    Input("invoice-pick-service", "n_clicks"),
     Input("invoice-pick-full", "n_clicks"),
     Input("invoice-back-to-mode", "n_clicks"),
     State("invoice-request-reviewed", "data"),
     prevent_initial_call=True,
 )
-def invoice_choose_settlement(_service_clicks, _full_clicks, _back_clicks, reviewed_data):
+def invoice_choose_settlement(_full_clicks, _back_clicks, reviewed_data):
     if not reviewed_data or not reviewed_data.get("id"):
         raise PreventUpdate
     trigger = ctx.triggered_id
     if not ctx.triggered or not ctx.triggered[0].get("value"):
         raise PreventUpdate
-    if trigger == "invoice-back-to-mode":
-        return "choose", _CHOOSE_VISIBLE, _DETAILS_HIDDEN, _SUBMIT_HIDDEN, no_update, ""
-    if trigger == "invoice-pick-service":
-        return "details", _CHOOSE_HIDDEN, _DETAILS_VISIBLE, _SUBMIT_VISIBLE, "SERVICE_FEE_ONLY", "Service Fee Only"
-    if trigger == "invoice-pick-full":
+    if trigger in {"invoice-pick-full", "invoice-back-to-mode"}:
         return "details", _CHOOSE_HIDDEN, _DETAILS_VISIBLE, _SUBMIT_VISIBLE, "FULL_SETTLEMENT", "Full Settlement"
     raise PreventUpdate
 
@@ -1194,10 +1599,10 @@ def update_invoice_modal(data, mode, amount, step, bl_id):
         )
     minimum = float((data or {}).get("minimum") or minimum_invoice_amount(reviewed))
     std_amount = max(float(amount or minimum), minimum)
-    invoice_type = mode or "SERVICE_FEE_ONLY"
-    std_for_calc = std_amount if invoice_type == "FULL_SETTLEMENT" else minimum
+    invoice_type = "FULL_SETTLEMENT"
+    std_for_calc = std_amount
     calc = repository.calculate_invoice(std_for_calc, invoice_type)
-    full_style = {"display": "grid", "gap": "14px"} if invoice_type == "FULL_SETTLEMENT" else {"display": "none"}
+    full_style = {"display": "grid", "gap": "14px"}
     quote = gn83_quote_for_reviewed(reviewed)
     unit_hint = ""
     if quote.get("per_container") and quote.get("units", 1) > 1:
@@ -1295,31 +1700,30 @@ def submit_invoice_request(
             False,
         )
 
-    invoice_type = mode or "SERVICE_FEE_ONLY"
+    invoice_type = "FULL_SETTLEMENT"
     std_override = None
-    if invoice_type == "FULL_SETTLEMENT":
-        required_fields = [beneficiary_name, bank_name, account_number]
-        if any(not str(value or "").strip() for value in required_fields):
-            return (
-                html.Div(
-                    "Enter all beneficiary bank details for Full Settlement.",
-                    className="notice error",
-                ),
-                no_update,
-                False,
-                False,
-            )
-        if "CONFIRMED" not in (confirmed or []):
-            return (
-                html.Div(
-                    "Confirm the beneficiary bank details before requesting the invoice.",
-                    className="notice error",
-                ),
-                no_update,
-                False,
-                False,
-            )
-        std_override = float(amount or 0)
+    required_fields = [beneficiary_name, bank_name, account_number]
+    if any(not str(value or "").strip() for value in required_fields):
+        return (
+            html.Div(
+                "Enter all beneficiary bank details for Full Settlement.",
+                className="notice error",
+            ),
+            no_update,
+            False,
+            False,
+        )
+    if "CONFIRMED" not in (confirmed or []):
+        return (
+            html.Div(
+                "Confirm the beneficiary bank details before requesting the invoice.",
+                className="notice error",
+            ),
+            no_update,
+            False,
+            False,
+        )
+    std_override = float(amount or 0)
 
     try:
         _invoice_logger.info(
@@ -1375,7 +1779,7 @@ def submit_invoice_request(
         )
 
     capitalpay_no = invoice.get("capitalpay_urn") or "-"
-    invoice_label = invoice["invoice_type"].replace("_", " ").title()
+    invoice_label = _invoice_type_label(invoice.get("invoice_type"))
     message = (
         f"{invoice_label} invoice {invoice['invoice_number']} generated for "
         f"{repository.money(invoice['total'])}. CapitalPay ref {capitalpay_no}."
@@ -1457,14 +1861,13 @@ def submit_invoice_pay_now(
     if not str(phone or "").strip():
         return html.Div("Enter a contact phone number before opening checkout.", className="notice error"), no_update, False, False
 
-    invoice_type = mode or "SERVICE_FEE_ONLY"
+    invoice_type = "FULL_SETTLEMENT"
     std_override = None
-    if invoice_type == "FULL_SETTLEMENT":
-        if any(not str(value or "").strip() for value in [beneficiary_name, bank_name, account_number]):
-            return html.Div("Enter all beneficiary bank details for Full Settlement.", className="notice error"), no_update, False, False
-        if "CONFIRMED" not in (confirmed or []):
-            return html.Div("Confirm the beneficiary bank details before paying.", className="notice error"), no_update, False, False
-        std_override = float(amount or 0)
+    if any(not str(value or "").strip() for value in [beneficiary_name, bank_name, account_number]):
+        return html.Div("Enter all beneficiary bank details for Full Settlement.", className="notice error"), no_update, False, False
+    if "CONFIRMED" not in (confirmed or []):
+        return html.Div("Confirm the beneficiary bank details before paying.", className="notice error"), no_update, False, False
+    std_override = float(amount or 0)
 
     try:
         invoice = repository.generate_invoice(
@@ -1545,7 +1948,7 @@ clientside_callback(
 
 def invoice_breakdown(calc: dict, invoice_type: str, reviewed: dict | None = None) -> html.Div:
     rows_list: list[tuple[str, float, bool]] = []
-    if invoice_type == "SERVICE_FEE_ONLY":
+    if invoice_type != "FULL_SETTLEMENT":
         quote = gn83_quote_for_reviewed(reviewed) if reviewed else {}
         basis = quote.get("std_min_fee") or calc["std_min_fee"]
         if quote.get("per_container") and quote.get("units", 1) > 1:

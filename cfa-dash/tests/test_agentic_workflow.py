@@ -27,7 +27,7 @@ BL_CASES = [
             "no_containers": 1,
             "gross_weight": 27.065,
             "gn83_category": "20FT_CONTAINER",
-            "service_total": 35.0,
+            "full_total": 209.0,
         },
     ),
     (
@@ -37,7 +37,7 @@ BL_CASES = [
             "no_containers": 10,
             "gross_weight": 270.65,
             "gn83_category": "20FT_CONTAINER",
-            "service_total": 348.0,
+            "full_total": 2088.0,
         },
     ),
 ]
@@ -82,7 +82,7 @@ def test_agentic_five_value_gate_blocks_before_send():
         gross_weight=27.065,
         no_containers=1,
         gn83_category="20FT_CONTAINER",
-        invoice_type="SERVICE_FEE_ONLY",
+        invoice_type="FULL_SETTLEMENT",
     )
     with pytest.raises(ValueError, match="Confirm the five-value"):
         agentic_workflow.validate_five_values(
@@ -116,6 +116,41 @@ def test_agentic_invoice_checkout_url_uses_capitalpay_route():
     assert agentic_workflow.invoice_checkout_url("inv-agentic-pay") == "/capitalpay/checkout/inv-agentic-pay"
 
 
+def test_agentic_full_settlement_passes_bank_details(monkeypatch):
+    captured = {}
+
+    def fake_generate_invoice(reviewed_id, invoice_type, **kwargs):
+        captured.update({"reviewed_id": reviewed_id, "invoice_type": invoice_type, **kwargs})
+        return {
+            "id": "inv-agentic-bank",
+            "invoice_number": "INV-AGENTIC-BANK",
+            "invoice_type": invoice_type,
+            "total": 209.0,
+            "beneficiary_name": kwargs.get("beneficiary_name"),
+            "beneficiary_bank_name": kwargs.get("beneficiary_bank_name"),
+            "beneficiary_account_number": kwargs.get("beneficiary_account_number"),
+        }
+
+    monkeypatch.setattr(repository, "generate_invoice", fake_generate_invoice)
+
+    invoice = agentic_workflow.generate_agentic_invoice_for_review(
+        "reviewed-bank",
+        invoice_type="FULL_SETTLEMENT",
+        email="importer@example.com",
+        phone="0971234567",
+        beneficiary_name="ZAFFA Clearing",
+        beneficiary_bank_name="Stanbic Bank Zambia",
+        beneficiary_account_number="9130000123456",
+        idempotency_key="agentic-bank-test",
+    )
+
+    assert invoice["beneficiary_bank_name"] == "Stanbic Bank Zambia"
+    assert captured["invoice_type"] == "FULL_SETTLEMENT"
+    assert captured["beneficiary_name"] == "ZAFFA Clearing"
+    assert captured["beneficiary_bank_name"] == "Stanbic Bank Zambia"
+    assert captured["beneficiary_account_number"] == "9130000123456"
+
+
 def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
     pdf, expected = BL_CASES[0]
     if not pdf.is_file():
@@ -138,7 +173,7 @@ def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
             gross_weight=extracted["gross_weight"],
             no_containers=extracted["no_containers"],
             gn83_category=extracted["gn83_category"],
-            invoice_type="SERVICE_FEE_ONLY",
+            invoice_type="FULL_SETTLEMENT",
         )
         agentic_workflow.validate_five_values(
             data,
@@ -151,7 +186,7 @@ def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
         reviewed = agentic_workflow.issue_agentic_zsad(bl["id"])
         result = agentic_workflow.generate_and_share_agentic_invoice(
             reviewed["id"],
-            invoice_type="SERVICE_FEE_ONLY",
+            invoice_type="FULL_SETTLEMENT",
             email="importer@example.com",
             phone="0971234567",
             channels=["EMAIL", "WHATSAPP"],
@@ -159,9 +194,9 @@ def test_agentic_e2e_generates_zsad_invoice_and_share(monkeypatch):
         summary = agentic_workflow.summarize_result(result["invoice"], repository.get_reviewed_bl(reviewed["id"]), result["share_results"])
         assert summary["bl_number"] == expected["bl_number"]
         assert summary["z_sad_number"].startswith("Z-SAD-")
-        assert summary["total"] == expected["service_total"]
+        assert summary["total"] == expected["full_total"]
         assert summary["capitalpay_ref"].startswith("CPAY")
-        assert summary["payable_amount"] == expected["service_total"]
+        assert summary["payable_amount"] == expected["full_total"]
         assert summary["whatsapp_url"].startswith("https://wa.me/")
         assert summary["email"]["sent"] is True
         assert "download/invoice" in summary["pdf_url"]
@@ -177,7 +212,7 @@ def test_agentic_invoice_share_is_idempotent(monkeypatch):
         "bl_number": "MSC4051473322",
         "z_sad_number": "Z-SAD-IDEM",
         "invoice_number": "INV-IDEM",
-        "invoice_type": "SERVICE_FEE_ONLY",
+        "invoice_type": "FULL_SETTLEMENT",
         "total": 35.0,
         "std_min_fee": 150.0,
     }
@@ -195,7 +230,7 @@ def test_agentic_invoice_share_is_idempotent(monkeypatch):
 
     first = agentic_workflow.generate_and_share_agentic_invoice(
         "reviewed-idem",
-        invoice_type="SERVICE_FEE_ONLY",
+        invoice_type="FULL_SETTLEMENT",
         email="importer@example.com",
         phone="0971234567",
         channels=["EMAIL", "WHATSAPP"],
@@ -203,7 +238,7 @@ def test_agentic_invoice_share_is_idempotent(monkeypatch):
     )
     second = agentic_workflow.generate_and_share_agentic_invoice(
         "reviewed-idem",
-        invoice_type="SERVICE_FEE_ONLY",
+        invoice_type="FULL_SETTLEMENT",
         email="importer@example.com",
         phone="0971234567",
         channels=["EMAIL", "WHATSAPP"],

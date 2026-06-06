@@ -65,6 +65,13 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
   route_type TEXT NOT NULL,
   transport_mode TEXT NOT NULL,
   zra_regime TEXT NOT NULL,
+  bl_type TEXT,
+  currency TEXT,
+  agent_license TEXT,
+  company_name TEXT,
+  consignor_tin TEXT,
+  declarant_number TEXT,
+  consignment_value REAL,
   shipper_name TEXT,
   shipper_address TEXT,
   shipper_country TEXT,
@@ -76,6 +83,8 @@ CREATE TABLE IF NOT EXISTS bills_of_lading (
   consignee_name TEXT,
   gross_weight REAL DEFAULT 0,
   no_containers INTEGER DEFAULT 0,
+  gn83_unit TEXT,
+  gn83_fee_usd REAL,
   file_name TEXT,
   status TEXT NOT NULL DEFAULT 'UPLOADED',
   uploaded_by TEXT,
@@ -280,3 +289,66 @@ CREATE TABLE IF NOT EXISTS login_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_login_events_created ON login_events(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS registration_link_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  email TEXT,
+  source TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_registration_link_events_created ON registration_link_events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_registration_link_events_user ON registration_link_events(user_id);
+
+CREATE TABLE IF NOT EXISTS settlement_runs (
+  id TEXT PRIMARY KEY,
+  run_key TEXT NOT NULL UNIQUE,
+  run_number TEXT NOT NULL,
+  prepared_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  total_amount_tzs REAL NOT NULL DEFAULT 0,
+  cfa_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'PREPARED'
+);
+
+CREATE TABLE IF NOT EXISTS settlement_run_items (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  company_id TEXT,
+  cfa_company_name TEXT NOT NULL,
+  cfa_licence_number TEXT,
+  bank_name TEXT,
+  bank_branch TEXT,
+  bank_account_number TEXT,
+  amount_tzs REAL NOT NULL DEFAULT 0,
+  declarations_count INTEGER NOT NULL DEFAULT 0,
+  payment_status TEXT NOT NULL DEFAULT 'Pending',
+  capitalpay_reference TEXT,
+  flag_reason TEXT,
+  last_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(run_id, company_id),
+  FOREIGN KEY(run_id) REFERENCES settlement_runs(id) ON DELETE CASCADE,
+  FOREIGN KEY(company_id) REFERENCES companies(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlement_run_items_run ON settlement_run_items(run_id);
+CREATE INDEX IF NOT EXISTS idx_settlement_run_items_status ON settlement_run_items(payment_status);
+
+CREATE TABLE IF NOT EXISTS settlement_download_logs (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  user_id TEXT,
+  user_email TEXT,
+  file_name TEXT NOT NULL,
+  cfa_count INTEGER NOT NULL DEFAULT 0,
+  total_amount_tzs REAL NOT NULL DEFAULT 0,
+  downloaded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(run_id) REFERENCES settlement_runs(id) ON DELETE CASCADE,
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlement_download_logs_run ON settlement_download_logs(run_id);
+CREATE INDEX IF NOT EXISTS idx_settlement_download_logs_downloaded ON settlement_download_logs(downloaded_at DESC);

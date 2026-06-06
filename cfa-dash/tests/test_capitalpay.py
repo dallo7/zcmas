@@ -31,7 +31,7 @@ def test_build_create_payload_single_item_format():
     calc = {"std_min_fee": 150.0, "admin_fee": 30.0, "vat": 4.8, "total": 35.0}
     payload = _build_create_payload(
         client_invoice_ref="INV-TEST-1",
-        invoice_type="SERVICE_FEE_ONLY",
+        invoice_type="FULL_SETTLEMENT",
         calc=calc,
         customer_name="ETS ARAKA",
         email="importer@example.com",
@@ -81,7 +81,7 @@ def test_create_signed_invoice_uses_api_invoice_number(mock_post):
         result = create_signed_invoice(
             client_invoice_ref="INV-20260520-TEST",
             amount=35.0,
-            invoice_type="SERVICE_FEE_ONLY",
+            invoice_type="FULL_SETTLEMENT",
             calc={"std_min_fee": 150.0, "admin_fee": 30.0, "vat": 4.8, "total": 35.0},
             customer_name="ETS ARAKA",
             email="importer@example.com",
@@ -104,7 +104,7 @@ def test_mock_mode_uses_cpaysmock_prefix():
     result = create_signed_invoice(
         client_invoice_ref="INV-MOCK",
         amount=35.0,
-        invoice_type="SERVICE_FEE_ONLY",
+        invoice_type="FULL_SETTLEMENT",
         calc={"std_min_fee": 150.0, "admin_fee": 30.0, "vat": 4.8, "total": 35.0},
         customer_name="Test",
     )
@@ -151,7 +151,7 @@ def test_create_signed_invoice_requires_credentials():
         create_signed_invoice(
             client_invoice_ref="INV-TEST",
             amount=10.0,
-            invoice_type="SERVICE_FEE_ONLY",
+            invoice_type="FULL_SETTLEMENT",
             calc={"std_min_fee": 10.0, "admin_fee": 2.5, "vat": 0.0, "total": 2.5},
             customer_name="Test",
         )

@@ -146,7 +146,7 @@ def test_e2e_bl_upload_zsad_invoice_pdf_download():
 
         invoice = generate_invoice(
             reviewed["id"],
-            "SERVICE_FEE_ONLY",
+            "FULL_SETTLEMENT",
             contact_phone="0971234567",
             contact_email="importer@example.com",
         )

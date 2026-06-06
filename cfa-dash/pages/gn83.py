@@ -16,6 +16,10 @@ def layout(**_kwargs):
                 html.Div(
                     [
                         html.H2(f"{route} - {mode}"),
+                        html.P(
+                            "Minimum agency-fee categories used by ZCAMS invoice calculations for this route and transport mode.",
+                            className="muted section-lead",
+                        ),
                         status_table(
                             ["Category", "Description", "Minimum Fee"],
                             [[key, label, f"${amount:,.2f}"] for key, (label, amount) in fees.items()],

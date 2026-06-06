@@ -15,7 +15,7 @@ PAGE_TUTORIALS = {
         "steps": [
             "Open Agentic Mode from the Dashboard header.",
             "Upload the BL and wait for the extraction progress to complete.",
-            "Confirm the five critical values: BL number, consignee TIN, gross weight, cargo/container count, and Service Fee or Full Settlement.",
+            "Confirm the five critical values: BL number, consignee TIN, gross weight, cargo/container count, and Agency Charge or Full Settlement.",
             "Enter the client email and phone number before running the workflow.",
             "Run Agentic Workflow and watch the milestones until the invoice is generated and shared.",
         ],
@@ -48,7 +48,7 @@ PAGE_TUTORIALS = {
         "objective": "Create and settle GN 83-compliant invoices linked to reviewed BLs.",
         "steps": [
             "Confirm the reviewed BL and Z-SAD are correct before billing.",
-            "Choose Full Settlement or Service Fee Only based on the payment scenario.",
+            "Use Full Settlement for the invoice payment scenario.",
             "Let ZCAMS calculate minimum fee, admin fee, VAT, and total.",
             "Use the generated invoice record for payment follow-up.",
             "Mark the invoice as settled once payment is confirmed.",

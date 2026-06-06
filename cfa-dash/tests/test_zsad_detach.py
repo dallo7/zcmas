@@ -64,7 +64,7 @@ def _fresh_reviewed(bl_number: str = "BL-DETACH-TEST-001"):
 def test_detach_cancels_invoice_and_issues_new_zsad():
     reviewed = _fresh_reviewed()
     first_zsad = reviewed["z_sad_number"]
-    invoice = generate_invoice(reviewed["id"], "SERVICE_FEE_ONLY", contact_phone="0971111111")
+    invoice = generate_invoice(reviewed["id"], "FULL_SETTLEMENT", contact_phone="0971111111")
     assert invoice["status"] == "AWAITING_PAYMENT"
 
     preview = get_zsad_detach_preview(reviewed["id"])
@@ -96,7 +96,7 @@ def test_detach_blocked_after_cargo_released():
     from services.repository import issue_cargo_release, settle_invoice
 
     reviewed = _fresh_reviewed("BL-DETACH-RELEASED-001")
-    invoice = generate_invoice(reviewed["id"], "SERVICE_FEE_ONLY", contact_phone="0971222222")
+    invoice = generate_invoice(reviewed["id"], "FULL_SETTLEMENT", contact_phone="0971222222")
     settle_invoice(invoice["id"])
     issue_cargo_release(reviewed["id"])
 
@@ -116,7 +116,7 @@ def test_detach_blocked_after_cargo_released():
 def test_detach_for_reupload_allows_awaiting_payment_and_cancels_journey():
     reviewed = _fresh_reviewed("BL-DETACH-REUPLOAD-001")
     first_zsad = reviewed["z_sad_number"]
-    invoice = generate_invoice(reviewed["id"], "SERVICE_FEE_ONLY", contact_phone="0971333333")
+    invoice = generate_invoice(reviewed["id"], "FULL_SETTLEMENT", contact_phone="0971333333")
     assert invoice["status"] == "AWAITING_PAYMENT"
 
     preview = get_zsad_detach_preview(reviewed["id"])
@@ -134,7 +134,7 @@ def test_detach_for_reupload_blocked_when_settled_release_pending():
     from services.repository import settle_invoice
 
     reviewed = _fresh_reviewed("BL-DETACH-RELEASE-PENDING-001")
-    invoice = generate_invoice(reviewed["id"], "SERVICE_FEE_ONLY", contact_phone="0971444444")
+    invoice = generate_invoice(reviewed["id"], "FULL_SETTLEMENT", contact_phone="0971444444")
     settle_invoice(invoice["id"])
 
     preview = get_zsad_detach_preview(reviewed["id"])

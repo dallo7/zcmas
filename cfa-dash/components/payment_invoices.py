@@ -51,28 +51,39 @@ def payment_invoices_table(invoices: list[dict], *, show_company: bool = False) 
         pay_url = _pay_url(inv)
         pay_control = (
             html.A(
-                [icon("lucide:credit-card", 14), "Pay here"],
+                icon("lucide:credit-card", 15),
                 href=pay_url,
                 target="_blank",
                 className="payment-action-link payment-action-link--pay",
+                title="Pay here",
+                **{"aria-label": "Pay here"},
             )
             if pay_url
-            else html.Span("Pay here", className="payment-action-link payment-action-link--disabled")
+            else html.Span(
+                icon("lucide:credit-card", 15),
+                className="payment-action-link payment-action-link--disabled",
+                title="Pay here",
+                **{"aria-label": "Pay here"},
+            )
         )
         actions = html.Div(
             [
                 html.A(
-                    [icon("lucide:file-down", 14), "Download PDF"],
+                    icon("lucide:file-down", 15),
                     href=repository.invoice_download_url(inv["id"]),
                     target="_blank",
                     className="payment-action-link payment-action-link--pdf",
+                    title="Download PDF",
+                    **{"aria-label": "Download PDF"},
                 ),
                 pay_control,
                 html.A(
-                    [icon("lucide:message-circle", 14), "WhatsApp"],
+                    icon("ic:baseline-whatsapp", 17),
                     href=repository.invoice_whatsapp_link(inv["id"]),
                     target="_blank",
                     className="payment-action-link payment-action-link--share",
+                    title="WhatsApp",
+                    **{"aria-label": "WhatsApp"},
                 ),
             ],
             className="payment-invoice-actions",

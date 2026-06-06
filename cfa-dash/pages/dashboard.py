@@ -40,20 +40,6 @@ def layout(**_kwargs):
                     html.Div(id="dashboard-shortcuts", className="shortcut-row"),
                     html.Div(id="dashboard-metrics", className="dashboard-grid"),
                     html.Div(id="dashboard-panels", className="two-column dashboard-panels"),
-                    html.Div(
-                        [
-                            html.Span("Keyboard: "),
-                            html.Kbd("Alt+2"),
-                            html.Span(" BLs · "),
-                            html.Kbd("Alt+3"),
-                            html.Span(" Reviewed BL · "),
-                            html.Kbd("Alt+4"),
-                            html.Span(" Invoices · "),
-                            html.Kbd("Alt+5"),
-                            html.Span(" Check-out"),
-                        ],
-                        className="keyboard-hint muted",
-                    ),
                 ],
                 className="page-content stack",
             ),
@@ -93,6 +79,10 @@ def refresh_dashboard(user):
         html.Div(
             [
                 html.H2("Recent Notifications"),
+                html.P(
+                    "Latest system events for the signed-in user or company, with a link to the full notification history.",
+                    className="muted section-lead",
+                ),
                 html.Div(
                     [
                         html.Div(
@@ -125,6 +115,10 @@ def _updates_panel(stats: dict):
     return html.Div(
         [
             html.H2("Operational Updates"),
+            html.P(
+                "A quick summary of workflow items that need attention across notifications, BL review, Z-SADs, payments, and release.",
+                className="muted section-lead",
+            ),
             html.Div(
                 [
                     html.Div(

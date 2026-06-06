@@ -131,12 +131,8 @@ def _build_items(
 ) -> list[dict[str, Any]]:
     account_id = int(_config()["account_id"])
     ref_suffix = (bl_number or "BL")[-8:].upper().replace(" ", "X")
-    if invoice_type == "SERVICE_FEE_ONLY":
-        desc = f"ZCAMS GN 83 Service Fee | BL {bl_number} | Z-SAD {z_sad_number}"
-        item_ref = f"ITEM-SVC-{ref_suffix}"
-    else:
-        desc = f"ZCAMS GN 83 Full Settlement | BL {bl_number} | Z-SAD {z_sad_number}"
-        item_ref = f"ITEM-FULL-{ref_suffix}"
+    desc = f"ZCAMS GN 83 Full Settlement | BL {bl_number} | Z-SAD {z_sad_number}"
+    item_ref = f"ITEM-FULL-{ref_suffix}"
     return [_item_simple(account_id=account_id, desc=desc, item_ref=item_ref, price=payable)]
 
 
@@ -304,7 +300,7 @@ def sign_invoice(invoice_number: str, amount: float, **kwargs: Any) -> dict:
     return create_signed_invoice(
         client_invoice_ref=invoice_number,
         amount=amount,
-        invoice_type=kwargs.get("invoice_type", "SERVICE_FEE_ONLY"),
+        invoice_type=kwargs.get("invoice_type", "FULL_SETTLEMENT"),
         calc=kwargs.get("calc") or {"std_min_fee": amount, "admin_fee": 0.0, "vat": 0.0, "total": amount},
         customer_name=kwargs.get("customer_name", "ZCAMS Importer"),
         email=kwargs.get("email"),

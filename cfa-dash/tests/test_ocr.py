@@ -13,6 +13,31 @@ MSC_BL_PDF = Path(
 )
 
 
+STRUCTURED_SAMPLE = {
+    "bl_type": "IM4",
+    "currency": "USD",
+    "bl_number": "AI123456",
+    "agentLicense": "ZRA-AGT-2026-001",
+    "company_name": "Image Importer",
+    "consignee_tin": "1000123456",
+    "consignor_tin": "SHIPPER-001",
+    "declarant_number": "ZRA-AGT-2026-001",
+    "consignment_value": 54130,
+    "document_type": "Bill of Lading",
+    "transport_mode": "Sea",
+    "zra_regime": "IM4 Home Use",
+    "consignee": "Image Importer",
+    "origin": "Durban",
+    "destination": "Lusaka",
+    "no_of_containers": 1,
+    "gross_weight_mt": 12.5,
+    "cargo_description": "Tutorial cargo",
+    "gn83_category": "Motor Vehicle",
+    "gn83_unit": "Unit",
+    "gn83_fee_usd": 130,
+}
+
+
 def test_parse_msc_bl_sample_text():
     text = (Path(__file__).resolve().parent / "fixtures" / "msc_bl_sample.txt").read_text(encoding="utf-8")
     parsed = parse_bl_text(text)
@@ -55,8 +80,10 @@ def test_image_pdf_routes_through_openai_ocr(monkeypatch, tmp_path):
     pdf_path.write_bytes(b"%PDF-1.4 image-only placeholder")
 
     monkeypatch.setenv("OCR_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(ocr, "extract_text_pdf", lambda _path: "")
     monkeypatch.setattr(ocr, "pdf_to_images", lambda _path: [object()])
+    monkeypatch.setattr(ocr, "extract_structured_bl_json", lambda _text: STRUCTURED_SAMPLE)
     monkeypatch.setattr(
         ocr,
         "extract_text_with_openai",
@@ -67,7 +94,11 @@ def test_image_pdf_routes_through_openai_ocr(monkeypatch, tmp_path):
 
     assert result["ocr_provider"] == "openai"
     assert result["ocr_mode"] == "image_pdf_ocr"
-    assert result["bl_number"] == "IMG123456"
+    assert result["bl_number"] == "AI123456"
+    assert result["agent_license"] == "ZRA-AGT-2026-001"
+    assert result["consignor_tin"] == "SHIPPER-001"
+    assert result["gn83_category"] == "MOTOR_VEHICLE"
+    assert result["gn83_fee_usd"] == 130
 
 
 def test_pdf_router_uses_text_pdf_when_fast_text(monkeypatch, tmp_path):
@@ -75,6 +106,7 @@ def test_pdf_router_uses_text_pdf_when_fast_text(monkeypatch, tmp_path):
     pdf_path.write_bytes(b"%PDF-1.4")
 
     monkeypatch.setenv("OCR_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(ocr, "_pdf_likely_scanned", lambda _path: False)
 
     def fail_openai(*_args, **_kwargs):
@@ -82,12 +114,16 @@ def test_pdf_router_uses_text_pdf_when_fast_text(monkeypatch, tmp_path):
 
     monkeypatch.setattr(ocr, "extract_text_pdf", lambda _path: "Bill of Lading No: TXT123456 Consignee: Text Importer")
     monkeypatch.setattr(ocr, "extract_text_with_openai", fail_openai)
+    monkeypatch.setattr(ocr, "extract_structured_bl_json", lambda _text: {**STRUCTURED_SAMPLE, "bl_number": "TXT123456"})
 
     result = extract_bl_fields(str(pdf_path))
 
     assert result["ocr_provider"] == "pypdf"
     assert result["ocr_mode"] == "text_pdf"
     assert result["bl_number"] == "TXT123456"
+    assert result["bl_type"] == "IM4"
+    assert result["company_name"] == "Image Importer"
+    assert result["gn83_unit"] == "Unit"
 
 
 def test_pdf_router_falls_back_when_text_extraction_is_slow(monkeypatch, tmp_path):

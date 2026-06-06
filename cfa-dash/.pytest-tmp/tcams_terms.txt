@@ -80,7 +80,7 @@ Promptly notify TCAMS of any changes to shipment details, routing, or consignee 
 
 4. Fees and Payment
 
-4.1 Service Fees
+4.1 Professional Charges
 
 Service fees shall be as quoted in the applicable Service Order or pro-forma invoice. All fees are exclusive of applicable taxes, government duties, port charges, and third-party costs unless expressly stated otherwise.
 
@@ -100,7 +100,7 @@ Returned payments: USD 50 handling fee per occurrence
 
 5. Limitation of Liability
 
-TCAMS's total liability to the Client under this Agreement shall not exceed the total service fees paid by the Client for the specific Shipment giving rise to the claim. TCAMS shall not be liable for:
+TCAMS's total liability to the Client under this Agreement shall not exceed the total professional charges paid by the Client for the specific Shipment giving rise to the claim. TCAMS shall not be liable for:
 
 Indirect, consequential, incidental, or punitive damages
 

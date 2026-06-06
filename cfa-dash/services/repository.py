@@ -596,9 +596,11 @@ def list_system_users(search: str | None = None) -> list[dict]:
         ORDER BY
           CASE u.role
             WHEN 'SUPER_ADMIN' THEN 1
-            WHEN 'COMPANY_ADMIN' THEN 2
-            WHEN 'DECLARANT' THEN 3
-            ELSE 4
+            WHEN 'ADMIN' THEN 2
+            WHEN 'OPERATIONS' THEN 3
+            WHEN 'COMPANY_ADMIN' THEN 4
+            WHEN 'DECLARANT' THEN 5
+            ELSE 6
           END,
           u.created_at DESC
     """
@@ -641,9 +643,13 @@ def update_company_user(
 ) -> dict:
     if not first_name or not last_name or not email:
         raise ValueError("First name, last name, and email are required.")
+    if normalize_role(role) != OPERATIONAL_ROLE:
+        raise ValueError("Company Admin can only create or update Declarant users.")
     existing = get_company_user(user_id, company_id)
     if not existing:
         raise ValueError("Selected user was not found for this company.")
+    if normalize_role(existing.get("role")) != OPERATIONAL_ROLE:
+        raise ValueError("Company Admin can only manage Declarant users.")
     email_conflict = row(
         "SELECT id FROM users WHERE lower(email) = lower(?) AND id != ?",
         (email, user_id),
@@ -667,6 +673,8 @@ def set_company_user_status(user_id: str, company_id: str, status: str) -> dict:
     existing = get_company_user(user_id, company_id)
     if not existing:
         raise ValueError("Selected user was not found for this company.")
+    if normalize_role(existing.get("role")) != OPERATIONAL_ROLE:
+        raise ValueError("Company Admin can only manage Declarant users.")
     status = "SUSPENDED" if status == "SUSPENDED" else "ACTIVE"
     if existing.get("role") == "COMPANY_ADMIN" and status == "SUSPENDED":
         active_admins = rows(
@@ -689,6 +697,8 @@ def delete_company_user(user_id: str, company_id: str) -> None:
     existing = get_company_user(user_id, company_id)
     if not existing:
         raise ValueError("Selected user was not found for this company.")
+    if normalize_role(existing.get("role")) != OPERATIONAL_ROLE:
+        raise ValueError("Company Admin can only manage Declarant users.")
     if existing.get("role") == "COMPANY_ADMIN":
         other_admins = rows(
             """
@@ -715,6 +725,8 @@ def create_company_user(
 ) -> dict:
     if not first_name or not last_name or not email:
         raise ValueError("First name, last name, and email are required.")
+    if normalize_role(role) != OPERATIONAL_ROLE:
+        raise ValueError("Company Admin can only create Declarant users.")
     if row("SELECT id FROM users WHERE lower(email) = lower(?)", (email,)):
         raise ValueError("A user with that email already exists.")
     username = re.sub(r"[^a-z0-9]+", ".", email.lower().split("@", 1)[0]).strip(".") or f"agent-{uuid.uuid4().hex[:6]}"
@@ -785,8 +797,8 @@ def create_system_user(
     if row("SELECT id FROM companies WHERE id = ?", (company_id,)) is None:
         raise ValueError("Select a valid company for this user.")
     normalized_role = normalize_role(role)
-    if normalized_role not in {"SUPER_ADMIN", "COMPANY_ADMIN", "DECLARANT"}:
-        raise ValueError("Role must be Super Admin, Company Admin, or Declarant.")
+    if normalized_role not in {"SUPER_ADMIN", "ADMIN", "OPERATIONS", "COMPANY_ADMIN", "DECLARANT"}:
+        raise ValueError("Role must be Super Admin, Admin Support, Operations, Company Admin, or Declarant.")
     if row("SELECT id FROM users WHERE lower(email) = lower(?)", (email,)):
         raise ValueError("A user with that email already exists.")
     username = (username or "").strip().lower()
@@ -863,8 +875,8 @@ def update_system_user(
     if row("SELECT id FROM companies WHERE id = ?", (company_id,)) is None:
         raise ValueError("Select a valid company for this user.")
     normalized_role = normalize_role(role)
-    if normalized_role not in {"SUPER_ADMIN", "COMPANY_ADMIN", "DECLARANT"}:
-        raise ValueError("Role must be Super Admin, Company Admin, or Declarant.")
+    if normalized_role not in {"SUPER_ADMIN", "ADMIN", "OPERATIONS", "COMPANY_ADMIN", "DECLARANT"}:
+        raise ValueError("Role must be Super Admin, Admin Support, Operations, Company Admin, or Declarant.")
     conflict = row("SELECT id FROM users WHERE lower(email) = lower(?) AND id != ?", (email, user_id))
     if conflict:
         raise ValueError("Another user already uses that email.")
@@ -1058,7 +1070,17 @@ def generate_temp_password() -> str:
     return f"ZCAMS-{secrets.token_urlsafe(8)}"
 
 
-def email_new_user_registration(user_id: str, temp_password: str | None = None) -> dict:
+def registration_login_url(user_id: str | None, email: str | None = None, source: str = "registration") -> str:
+    base = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/")
+    params = {"zcams_source": source}
+    if user_id:
+        params["user"] = user_id
+    if email:
+        params["email"] = email
+    return f"{base}/login?{urlencode(params)}"
+
+
+def email_new_user_registration(user_id: str, temp_password: str | None = None, source: str = "new-user") -> dict:
     user = row(
         """
         SELECT u.id, u.company_id, c.name AS company_name, u.first_name, u.last_name,
@@ -1084,7 +1106,7 @@ def email_new_user_registration(user_id: str, temp_password: str | None = None) 
         )
     company_name = user.get("company_name") or "Your company"
     contact_name = f"{user.get('first_name') or ''} {user.get('last_name') or ''}".strip() or user.get("email")
-    login_url = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/") + "/login"
+    login_url = registration_login_url(user_id, user.get("email"), source)
     subject, text, html = new_user_registration_email(
         company_name=company_name,
         contact_name=contact_name,
@@ -1107,7 +1129,32 @@ def email_new_user_registration(user_id: str, temp_password: str | None = None) 
     return {"email_result": email_result, "temp_password": password}
 
 
-def approve_company(company_id: str) -> dict:
+def resend_user_credentials(user_id: str, *, source: str = "credential-resend", actor_role: str = "ADMIN") -> dict:
+    user = row(
+        """
+        SELECT id, company_id, email, role, status
+        FROM users
+        WHERE id = ?
+        """,
+        (user_id,),
+    )
+    if not user:
+        raise ValueError("User not found.")
+    if user.get("status") == "DELETED":
+        raise ValueError("Cannot resend credentials to a deleted user.")
+    delivery = email_new_user_registration(user_id, source=source)
+    email_result = delivery.get("email_result") or {}
+    if email_result.get("sent"):
+        notify("CREDENTIALS_RESENT", f"Login credentials resent to {user.get('email')}.", user_id, user.get("company_id"))
+    audit("RESEND_USER_CREDENTIALS", "user", user_id, normalize_role(actor_role), company_id=user.get("company_id"))
+    return {
+        "user": user,
+        "email_result": email_result,
+        "temp_password": delivery.get("temp_password"),
+    }
+
+
+def approve_company(company_id: str, registration_source: str = "onboarding-approval") -> dict:
     company = get_company(company_id)
     if not company:
         raise ValueError(f"Unknown company id: {company_id}")
@@ -1130,7 +1177,7 @@ def approve_company(company_id: str) -> dict:
         (password_hash, password_salt, admin_user["id"]),
     )
 
-    login_url = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/") + "/login"
+    login_url = registration_login_url(admin_user["id"], admin_user.get("email"), registration_source)
     contact_name = f"{admin_user.get('first_name', '')} {admin_user.get('last_name', '')}".strip() or "CFA Administrator"
     subject, text, html = onboarding_approval_email(
         company_name=company.get("name") or "Your company",
@@ -1140,7 +1187,7 @@ def approve_company(company_id: str) -> dict:
         password=temp_password,
         login_url=login_url,
     )
-    email_result = send_email(
+    email_result = send_new_user_registration_email(
         admin_user["email"],
         subject,
         text,
@@ -1324,6 +1371,80 @@ def admin_recent_audit_rows(company_id: str = DEMO_COMPANY_ID, limit: int = 20) 
         """,
         (company_id, limit),
     )
+
+
+def admin_support_summary() -> dict:
+    """Platform support counters for the Admin Support Centre."""
+    stats = dashboard_stats()
+    open_tickets = row("SELECT COUNT(*) AS count FROM support_tickets WHERE status != 'Resolved'")["count"]
+    failed_logins = row("SELECT COUNT(*) AS count FROM login_events WHERE success = 0")["count"]
+    active_sessions = row(
+        """
+        SELECT COUNT(*) AS count
+        FROM user_sessions
+        WHERE revoked_at IS NULL AND datetime(expires_at) > datetime('now')
+        """
+    )["count"]
+    pending_bls = row("SELECT COUNT(*) AS count FROM bills_of_lading WHERE status = 'UPLOADED'")["count"]
+    return {
+        **stats,
+        "open_tickets": open_tickets,
+        "failed_logins": failed_logins,
+        "active_sessions": active_sessions,
+        "pending_bls": pending_bls,
+    }
+
+
+def admin_support_company_readiness_rows(limit: int = 100) -> list[dict]:
+    """Cross-CFA readiness view for support staff."""
+    companies = rows(
+        """
+        SELECT c.*,
+               COUNT(DISTINCT u.id) AS users_count,
+               SUM(CASE WHEN u.role = 'COMPANY_ADMIN' THEN 1 ELSE 0 END) AS company_admins,
+               SUM(CASE WHEN u.role = 'DECLARANT' THEN 1 ELSE 0 END) AS declarants,
+               COUNT(DISTINCT cert.id) AS certificates,
+               COUNT(DISTINCT st.id) AS open_tickets
+        FROM companies c
+        LEFT JOIN users u ON u.company_id = c.id
+        LEFT JOIN certificates cert ON cert.company_id = c.id
+        LEFT JOIN support_tickets st ON st.company_id = c.id AND st.status != 'Resolved'
+        GROUP BY c.id
+        ORDER BY c.created_at DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    required_fields = [
+        ("pacra_number", "PACRA"),
+        ("tpin", "TPIN"),
+        ("zra_licence", "ZRA Licence"),
+        ("company_email", "Company Email"),
+        ("phone", "Phone"),
+        ("bank_name", "Bank Name"),
+        ("account_number", "Account Number"),
+        ("account_holder", "Account Holder"),
+    ]
+    readiness = []
+    for company in companies:
+        missing = [label for field, label in required_fields if not company.get(field)]
+        readiness.append(
+            {
+                "company_id": company.get("id"),
+                "company_name": company.get("name") or "-",
+                "status": company.get("status") or "-",
+                "compliance_score": compliance_score(company["id"]),
+                "banking_ready": "Yes" if all(company.get(field) for field in ("bank_name", "account_number", "account_holder")) else "No",
+                "users": int(company.get("users_count") or 0),
+                "company_admins": int(company.get("company_admins") or 0),
+                "declarants": int(company.get("declarants") or 0),
+                "certificates": int(company.get("certificates") or 0),
+                "open_tickets": int(company.get("open_tickets") or 0),
+                "missing_fields": ", ".join(missing) if missing else "None",
+                "created_at": company.get("created_at") or "-",
+            }
+        )
+    return readiness
 
 
 def nav_counts(company_id: str | None = None) -> dict:
@@ -1593,11 +1714,13 @@ def create_bl(
             """
             INSERT INTO bills_of_lading (
               id, company_id, bl_number, doc_type, route_type, transport_mode,
-              zra_regime, shipper_name, shipper_address, shipper_country,
+              zra_regime, bl_type, currency, agent_license, company_name,
+              consignor_tin, declarant_number, consignment_value,
+              shipper_name, shipper_address, shipper_country,
               carrier_name, vessel_vehicle_no, origin, destination,
               consignee_tin, consignee_name, gross_weight, no_containers,
-              file_name, status, uploaded_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              gn83_unit, gn83_fee_usd, file_name, status, uploaded_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 bl_id,
@@ -1607,6 +1730,13 @@ def create_bl(
                 data.get("route_type"),
                 data.get("transport_mode"),
                 data.get("zra_regime"),
+                data.get("bl_type"),
+                data.get("currency"),
+                data.get("agent_license") or data.get("agentLicense"),
+                data.get("company_name"),
+                data.get("consignor_tin"),
+                data.get("declarant_number"),
+                data.get("consignment_value"),
                 data.get("shipper_name"),
                 data.get("shipper_address"),
                 data.get("shipper_country"),
@@ -1618,6 +1748,8 @@ def create_bl(
                 data.get("consignee_name"),
                 data.get("gross_weight", 0),
                 data.get("no_containers", 0),
+                data.get("gn83_unit"),
+                data.get("gn83_fee_usd", min_fee),
                 data.get("file_name", "demo-bl.pdf"),
                 "UPLOADED",
                 DEMO_USER_ID,
@@ -1650,6 +1782,311 @@ def create_bl(
     if auto_review:
         bl["reviewed_bl"] = review_bl(bl_id)
     return bl
+
+
+def update_bl(bl_id: str, payload: dict, *, company_id: str = DEMO_COMPANY_ID, actor_id: str | None = None) -> dict:
+    existing = get_bl(bl_id)
+    if not existing or existing.get("company_id") != company_id:
+        raise ValueError("BL record was not found for this company.")
+    if existing.get("status") != "UPLOADED":
+        raise ValueError("Only saved BLs that have not been reviewed or issued a Z-SAD can be amended.")
+
+    new_bl_number = str(payload.get("bl_number") or "").strip()
+    if not new_bl_number:
+        raise ValueError("BL number is required.")
+    duplicate = row(
+        """
+        SELECT id
+        FROM bills_of_lading
+        WHERE bl_number = ? AND company_id = ? AND id != ? AND status != 'CANCELLED'
+        """,
+        (new_bl_number, company_id, bl_id),
+    )
+    if duplicate:
+        raise ValueError(f"Duplicate BL number: {new_bl_number}")
+
+    category = payload.get("gn83_category", "MOTOR_VEHICLE")
+    units = billable_units(
+        category,
+        no_containers=payload.get("no_containers"),
+        gross_weight=payload.get("gross_weight"),
+        quantity=payload.get("quantity", 1),
+    )
+    min_fee = lookup_fee(
+        payload.get("route_type", "Import"),
+        payload.get("transport_mode", "Sea"),
+        category,
+        quantity=units,
+        no_containers=payload.get("no_containers"),
+        gross_weight=payload.get("gross_weight"),
+    )
+    file_name = payload.get("file_name") or existing.get("file_name") or "demo-bl.pdf"
+
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE bills_of_lading
+            SET bl_number = ?,
+                doc_type = ?,
+                route_type = ?,
+                transport_mode = ?,
+                zra_regime = ?,
+                bl_type = ?,
+                currency = ?,
+                agent_license = ?,
+                company_name = ?,
+                consignor_tin = ?,
+                declarant_number = ?,
+                consignment_value = ?,
+                origin = ?,
+                destination = ?,
+                consignee_tin = ?,
+                consignee_name = ?,
+                gross_weight = ?,
+                no_containers = ?,
+                gn83_unit = ?,
+                gn83_fee_usd = ?,
+                file_name = ?
+            WHERE id = ? AND company_id = ? AND status = 'UPLOADED'
+            """,
+            (
+                new_bl_number,
+                payload.get("doc_type"),
+                payload.get("route_type"),
+                payload.get("transport_mode"),
+                payload.get("zra_regime"),
+                payload.get("bl_type"),
+                payload.get("currency"),
+                payload.get("agent_license") or payload.get("agentLicense"),
+                payload.get("company_name"),
+                payload.get("consignor_tin"),
+                payload.get("declarant_number"),
+                payload.get("consignment_value"),
+                payload.get("origin"),
+                payload.get("destination"),
+                payload.get("consignee_tin"),
+                payload.get("consignee_name"),
+                payload.get("gross_weight", 0),
+                payload.get("no_containers", 0),
+                payload.get("gn83_unit"),
+                payload.get("gn83_fee_usd", min_fee),
+                file_name,
+                bl_id,
+                company_id,
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE cargo_items
+            SET description = ?,
+                quantity = ?,
+                unit = ?,
+                weight = ?,
+                transport_mode = ?,
+                gn83_category = ?,
+                min_fee_usd = ?
+            WHERE id = (
+                SELECT id FROM cargo_items WHERE bl_id = ? ORDER BY rowid LIMIT 1
+            )
+            """,
+            (
+                payload.get("cargo_description", payload.get("description", "General cargo")),
+                units,
+                payload.get("unit", "Unit"),
+                payload.get("gross_weight", 0),
+                payload.get("transport_mode", "Sea"),
+                category,
+                min_fee,
+                bl_id,
+            ),
+        )
+        conn.commit()
+
+    notify("BL_AMENDED", f"BL {new_bl_number} amended.", bl_id, company_id)
+    audit("AMEND_BL", "bill_of_lading", bl_id, "Saved BL amended", company_id=company_id, user_id=actor_id)
+    return get_bl(bl_id)
+
+
+def correct_reviewed_bl_for_asycuda(
+    reviewed_id: str,
+    payload: dict,
+    *,
+    correction_reason: str,
+    company_id: str = DEMO_COMPANY_ID,
+    actor_id: str | None = None,
+) -> dict:
+    """Apply an audited ASYCUDA correction to the BL tied to an active Z-SAD."""
+    reviewed = get_reviewed_bl(reviewed_id)
+    if not reviewed or reviewed.get("company_id") != company_id:
+        raise ValueError("Reviewed BL was not found for this company.")
+    status = reviewed.get("status") or ""
+    if status not in {"REVIEWED_ZSAD_ISSUED", "AWAITING_PAYMENT"}:
+        if status == "CARGO_RELEASED":
+            raise ValueError("Cannot correct BL after cargo release has been issued.")
+        if status == "SETTLED_RELEASE_PENDING":
+            raise ValueError("Cannot correct BL after settlement while cargo release is pending.")
+        if status == "SETTLED":
+            raise ValueError("Cannot correct BL after payment settlement.")
+        raise ValueError("ASYCUDA BL correction is only available before settlement.")
+    if not reviewed.get("z_sad_id"):
+        raise ValueError("No active Z-SAD is linked to this reviewed BL.")
+    correction_reason = str(correction_reason or "").strip()
+    if not correction_reason:
+        raise ValueError("Enter the ASYCUDA correction reason before reissuing the Z-SAD.")
+
+    bl_id = reviewed["bl_id"]
+    new_bl_number = str(payload.get("bl_number") or "").strip()
+    if not new_bl_number:
+        raise ValueError("BL number is required.")
+    duplicate = row(
+        """
+        SELECT id
+        FROM bills_of_lading
+        WHERE bl_number = ? AND company_id = ? AND id != ? AND status != 'CANCELLED'
+        """,
+        (new_bl_number, company_id, bl_id),
+    )
+    if duplicate:
+        raise ValueError(f"Duplicate BL number: {new_bl_number}")
+
+    category = payload.get("gn83_category", "MOTOR_VEHICLE")
+    units = billable_units(
+        category,
+        no_containers=payload.get("no_containers"),
+        gross_weight=payload.get("gross_weight"),
+        quantity=payload.get("quantity", 1),
+    )
+    min_fee = lookup_fee(
+        payload.get("route_type", "Import"),
+        payload.get("transport_mode", "Sea"),
+        category,
+        quantity=units,
+        no_containers=payload.get("no_containers"),
+        gross_weight=payload.get("gross_weight"),
+    )
+    zsad_number = reviewed.get("z_sad_number")
+    open_invoices = rows(
+        "SELECT id, invoice_number FROM invoices WHERE reviewed_bl_id = ? AND status != 'CANCELLED'",
+        (reviewed_id,),
+    )
+    cancelled_numbers = [inv["invoice_number"] for inv in open_invoices]
+
+    with connect() as conn:
+        if open_invoices:
+            conn.execute(
+                """
+                UPDATE payments
+                SET status = 'CANCELLED'
+                WHERE invoice_id IN (
+                  SELECT id FROM invoices WHERE reviewed_bl_id = ? AND status != 'CANCELLED'
+                )
+                """,
+                (reviewed_id,),
+            )
+            conn.execute(
+                "UPDATE invoices SET status = 'CANCELLED' WHERE reviewed_bl_id = ? AND status != 'CANCELLED'",
+                (reviewed_id,),
+            )
+        conn.execute(
+            """
+            UPDATE bills_of_lading
+            SET bl_number = ?,
+                doc_type = ?,
+                route_type = ?,
+                transport_mode = ?,
+                zra_regime = ?,
+                company_name = ?,
+                origin = ?,
+                destination = ?,
+                consignee_tin = ?,
+                consignor_tin = ?,
+                consignee_name = ?,
+                gross_weight = ?,
+                no_containers = ?,
+                gn83_unit = ?,
+                gn83_fee_usd = ?
+            WHERE id = ? AND company_id = ?
+            """,
+            (
+                new_bl_number,
+                payload.get("doc_type"),
+                payload.get("route_type"),
+                payload.get("transport_mode"),
+                payload.get("zra_regime"),
+                payload.get("company_name"),
+                payload.get("origin"),
+                payload.get("destination"),
+                payload.get("consignee_tin"),
+                payload.get("consignor_tin"),
+                payload.get("consignee_name"),
+                payload.get("gross_weight", 0),
+                payload.get("no_containers", 0),
+                payload.get("gn83_unit"),
+                payload.get("gn83_fee_usd", min_fee),
+                bl_id,
+                company_id,
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE cargo_items
+            SET description = ?,
+                quantity = ?,
+                unit = ?,
+                weight = ?,
+                transport_mode = ?,
+                gn83_category = ?,
+                min_fee_usd = ?
+            WHERE id = (
+                SELECT id FROM cargo_items WHERE bl_id = ? ORDER BY rowid LIMIT 1
+            )
+            """,
+            (
+                payload.get("cargo_description", payload.get("description", "General cargo")),
+                units,
+                payload.get("gn83_unit") or payload.get("unit", "Unit"),
+                payload.get("gross_weight", 0),
+                payload.get("transport_mode", "Sea"),
+                category,
+                min_fee,
+                bl_id,
+            ),
+        )
+        conn.execute("UPDATE reviewed_bls SET status = 'REVIEWED_ZSAD_ISSUED' WHERE id = ?", (reviewed_id,))
+        conn.execute(
+            "UPDATE bills_of_lading SET status = 'REVIEWED_ZSAD_ISSUED', reviewed_at = ? WHERE id = ?",
+            (now_iso(), bl_id),
+        )
+        conn.commit()
+
+    notify(
+        "ASYCUDA_BL_CORRECTED",
+        f"BL {new_bl_number} corrected after ASYCUDA feedback. Z-SAD {zsad_number} remains active for resend.",
+        reviewed_id,
+        company_id=company_id,
+    )
+    if cancelled_numbers:
+        notify(
+            "INVOICE_CANCELLED_FOR_ASYCUDA_CORRECTION",
+            f"{len(cancelled_numbers)} invoice(s) cancelled after ASYCUDA BL correction for {new_bl_number}.",
+            reviewed_id,
+            company_id=company_id,
+        )
+    audit(
+        "ASYCUDA_BL_CORRECTION",
+        "reviewed_bl",
+        reviewed_id,
+        details=f"{correction_reason} | Z-SAD retained: {zsad_number}",
+        company_id=company_id,
+        user_id=actor_id,
+    )
+    updated = get_reviewed_bl(reviewed_id)
+    updated["asycuda_correction_summary"] = {
+        "zsad_number": zsad_number,
+        "cancelled_invoices": cancelled_numbers,
+        "cancelled_count": len(cancelled_numbers),
+    }
+    return updated
 
 
 def list_bls(company_id: str | None = None) -> list[dict]:
@@ -1738,10 +2175,11 @@ def list_reviewed_bls(company_id: str | None = DEMO_COMPANY_ID, include_cancelle
     query = """
         SELECT rb.*, bl.bl_number, bl.consignee_name, bl.consignee_tin, bl.route_type,
                bl.transport_mode, bl.no_containers, bl.gross_weight, bl.company_id,
-               zs.z_sad_number, zs.is_active, zs.is_used
+               zs.z_sad_number, zs.is_active, zs.is_used, ci.gn83_category
         FROM reviewed_bls rb
         JOIN bills_of_lading bl ON bl.id = rb.bl_id
         LEFT JOIN z_sads zs ON zs.id = rb.z_sad_id
+        LEFT JOIN cargo_items ci ON ci.bl_id = bl.id
     """
     params: tuple[Any, ...] = ()
     filters = []
@@ -2019,17 +2457,12 @@ def _write_checkout_cache(invoice_id: str, html: str) -> None:
 
 
 def invoice_pay_url(invoice: dict) -> str | None:
-    """Importer payment link (secure link or CapitalPay checkout URL)."""
-    fallback = "https://app.capitalpay.co.tz/pay/CPAYPKKEBP"
-    url = (invoice.get("secure_link") or invoice.get("checkout_url") or "").strip()
-    if url.startswith("https://app.capitalpay.co.tz/pay/") and "CPAYMOCK" not in url:
-        return url
-    capitalpay_no = invoice_capitalpay_number(invoice)
-    if capitalpay_no and capitalpay_no != "-":
-        ref = capitalpay_no.strip().split("/")[-1]
-        if ref and not ref.startswith("CPAYMOCK"):
-            return f"https://app.capitalpay.co.tz/pay/{ref}"
-    return fallback
+    """Importer-facing payment link through the ZCAMS checkout route."""
+    invoice_id = (invoice or {}).get("id")
+    if not invoice_id:
+        return None
+    base = (os.getenv("PUBLIC_APP_URL") or "http://127.0.0.1:8050").strip().rstrip("/")
+    return f"{base}/capitalpay/checkout/{invoice_id}"
 
 
 def _capitalpay_checkout_params(invoice: dict) -> dict[str, str]:
@@ -2223,10 +2656,18 @@ def generate_invoice(
     beneficiary_bank_name: str | None = None,
     beneficiary_account_number: str | None = None,
 ) -> dict:
+    invoice_type = (invoice_type or "FULL_SETTLEMENT").strip().upper()
+    if invoice_type != "FULL_SETTLEMENT":
+        raise ValueError("Only Full Settlement invoices are supported.")
     reviewed = get_reviewed_bl(reviewed_id)
     if not reviewed:
         raise ValueError(f"Unknown reviewed BL id: {reviewed_id}")
     quote = gn83_quote_for_reviewed(reviewed)
+    if quote.get("exempt"):
+        raise ValueError(
+            "GN 83 exempt cargo (fertiliser, petroleum, sugar, or in-house clearance). "
+            "Z-SAD remains active; settlement invoice is not required."
+        )
     minimum_std = round(float(quote["std_min_fee"]), 2)
     std = round(float(std_min_fee_override if std_min_fee_override is not None else minimum_std), 2)
     if std < minimum_std:
@@ -2377,12 +2818,14 @@ def get_invoice(invoice_id: str) -> dict:
     invoice = row(
         """
         SELECT inv.*, rb.bl_id, bl.bl_number, bl.consignee_name, bl.consignee_tin, bl.company_id,
+               ci.gn83_category, ci.description AS cargo_description,
                zs.z_sad_number, pay.secure_link, pay.status AS payment_status,
                pay.amount AS payment_amount, pay.capitalpay_ref
         FROM invoices inv
         JOIN reviewed_bls rb ON rb.id = inv.reviewed_bl_id
         JOIN bills_of_lading bl ON bl.id = rb.bl_id
         JOIN z_sads zs ON zs.id = inv.z_sad_id
+        LEFT JOIN cargo_items ci ON ci.bl_id = bl.id
         LEFT JOIN payments pay ON pay.invoice_id = inv.id
         WHERE inv.id = ?
         """,
@@ -2423,7 +2866,18 @@ def settle_invoice(invoice_id: str) -> dict:
 
 
 def issue_cargo_release(reviewed_id: str) -> None:
+    from services.gn83 import is_gn83_exempt
+
     reviewed = get_reviewed_bl(reviewed_id)
+    if not reviewed:
+        raise ValueError(f"Unknown reviewed BL id: {reviewed_id}")
+    status = reviewed.get("status") or ""
+    cargo = (reviewed.get("cargo_items") or [{}])[0]
+    exempt = is_gn83_exempt(cargo.get("gn83_category"))
+    if status not in {"SETTLED_RELEASE_PENDING", "REVIEWED_ZSAD_ISSUED"}:
+        raise ValueError("Cargo release is not available for the current BL status.")
+    if status == "REVIEWED_ZSAD_ISSUED" and not exempt:
+        raise ValueError("Settlement invoice must be completed before cargo release.")
     execute("UPDATE reviewed_bls SET status = 'CARGO_RELEASED' WHERE id = ?", (reviewed_id,))
     notify("CARGO_RELEASED", f"Cargo Release issued for BL {reviewed.get('bl_number')} by Admin ZCAMS.", reviewed_id)
 
@@ -2621,6 +3075,88 @@ def count_unedited_contracts(company_id: str | None = DEMO_COMPANY_ID) -> int:
         params = (company_id,)
     result = row(query, params)
     return int((result or {}).get("count") or 0)
+
+
+def bulk_registration_visibility(limit: int = 100) -> dict:
+    """Engagement analytics for CFA admins created through registration flows."""
+    user_rows = rows(
+        """
+        WITH click_stats AS (
+          SELECT user_id, COUNT(*) AS link_clicks, MAX(created_at) AS last_clicked_at
+          FROM registration_link_events
+          WHERE user_id IS NOT NULL
+          GROUP BY user_id
+        ),
+        login_stats AS (
+          SELECT user_id,
+                 COUNT(*) AS login_attempts,
+                 SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) AS successful_logins,
+                 SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed_logins,
+                 MAX(created_at) AS last_login_attempt_at
+          FROM login_events
+          WHERE user_id IS NOT NULL
+          GROUP BY user_id
+        )
+        SELECT u.id, u.company_id, c.name AS company_name, u.first_name, u.last_name,
+               u.email, u.username, u.status, u.created_at,
+               COALESCE(cs.link_clicks, 0) AS link_clicks,
+               cs.last_clicked_at,
+               COALESCE(ls.login_attempts, 0) AS login_attempts,
+               COALESCE(ls.successful_logins, 0) AS successful_logins,
+               COALESCE(ls.failed_logins, 0) AS failed_logins,
+               ls.last_login_attempt_at
+        FROM users u
+        LEFT JOIN companies c ON c.id = u.company_id
+        LEFT JOIN click_stats cs ON cs.user_id = u.id
+        LEFT JOIN login_stats ls ON ls.user_id = u.id
+        WHERE u.role = 'COMPANY_ADMIN'
+        ORDER BY COALESCE(ls.last_login_attempt_at, cs.last_clicked_at, u.created_at) DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    click_rows = rows(
+        """
+        SELECT rle.created_at, rle.source, rle.email, rle.ip_address,
+               u.email AS user_email, u.first_name, u.last_name, c.name AS company_name
+        FROM registration_link_events rle
+        LEFT JOIN users u ON u.id = rle.user_id
+        LEFT JOIN companies c ON c.id = u.company_id
+        ORDER BY rle.created_at DESC
+        LIMIT 20
+        """
+    )
+    login_rows = rows(
+        """
+        SELECT le.created_at, le.email, le.success, le.failure_reason, le.ip_address,
+               u.email AS user_email, u.first_name, u.last_name, u.role, c.name AS company_name
+        FROM login_events le
+        LEFT JOIN users u ON u.id = le.user_id
+        LEFT JOIN companies c ON c.id = u.company_id
+        WHERE u.role = 'COMPANY_ADMIN' OR le.user_id IS NULL
+        ORDER BY le.created_at DESC
+        LIMIT 20
+        """
+    )
+    total_admins = len(user_rows)
+    clicked_users = sum(1 for item in user_rows if int(item.get("link_clicks") or 0) > 0)
+    attempted_users = sum(1 for item in user_rows if int(item.get("login_attempts") or 0) > 0)
+    successful_users = sum(1 for item in user_rows if int(item.get("successful_logins") or 0) > 0)
+    return {
+        "summary": {
+            "company_admins": total_admins,
+            "link_clicks": sum(int(item.get("link_clicks") or 0) for item in user_rows),
+            "clicked_users": clicked_users,
+            "not_clicked": max(total_admins - clicked_users, 0),
+            "login_attempts": sum(int(item.get("login_attempts") or 0) for item in user_rows),
+            "attempted_users": attempted_users,
+            "successful_users": successful_users,
+            "failed_logins": sum(int(item.get("failed_logins") or 0) for item in user_rows),
+        },
+        "users": user_rows,
+        "clicks": click_rows,
+        "logins": login_rows,
+    }
 
 
 def default_contract_terms() -> str:
@@ -3173,8 +3709,13 @@ def create_support_ticket(
 
 
 def update_ticket_status(ticket_id: str, status: str) -> None:
+    existing = row("SELECT * FROM support_tickets WHERE id = ?", (ticket_id,))
+    if not existing:
+        raise ValueError("Support ticket not found.")
     resolved_at = now_iso() if status == "Resolved" else None
     execute("UPDATE support_tickets SET status = ?, resolved_at = ? WHERE id = ?", (status, resolved_at, ticket_id))
+    notify("SUPPORT_TICKET_UPDATED", f"Support ticket '{existing.get('subject')}' is now {status}.", ticket_id, existing["company_id"])
+    audit("UPDATE_SUPPORT_TICKET", "support_ticket", ticket_id, status, company_id=existing["company_id"])
 
 
 def list_support_tickets(company_id: str | None = None, search: str | None = None) -> list[dict]:
