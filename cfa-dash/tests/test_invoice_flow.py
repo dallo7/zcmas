@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 os.environ.setdefault("CAPITALPAY_MODE", "mock")
 
-from services import capitalpay
+from services import agentic_workflow, capitalpay
 from services.gn83 import calculate_invoice, lookup_fee
 from services.repository import (
     bootstrap,
@@ -112,3 +112,67 @@ def test_checkout_ref_update_controls_invoice_display_and_pdf():
     assert updated["capitalpay_ref"] == "CPAYCHECKOUT"
     assert updated["capitalpay_urn"] == "CPAYCHECKOUT"
     assert get_invoice(invoice["id"])["capitalpay_ref"] == "CPAYCHECKOUT"
+
+
+@patch.dict(os.environ, {"CAPITALPAY_MODE": "mock", "BIRD_EMAIL_MODE": "mock"}, clear=False)
+@patch("services.repository.send_email")
+def test_bl_route_and_agentic_route_both_send_email(mock_send_email):
+    """Standard BL / Reviewed BL invoice share and Agentic Mode use the same email path."""
+    mock_send_email.return_value = {"sent": True, "mode": "bird", "status_code": 202}
+    bootstrap()
+    importer_email = "importer-route-test@example.com"
+
+    bl = create_bl(
+        {
+            "bl_number": "BL-EMAIL-ROUTE-001",
+            "doc_type": "Bill of Lading",
+            "route_type": "Import",
+            "transport_mode": "Sea",
+            "zra_regime": "IM4 Home Use",
+            "consignee_name": "Route Test Importer",
+            "gross_weight": 12,
+            "cargo_description": "Email route test cargo",
+            "gn83_category": "MOTOR_VEHICLE",
+        },
+        auto_review=True,
+    )
+    reviewed = get_reviewed_bl(bl["reviewed_bl"]["id"])
+    invoice = generate_invoice(
+        reviewed["id"],
+        "FULL_SETTLEMENT",
+        contact_phone="0971234567",
+        contact_email=importer_email,
+    )
+    bl_share = share_invoice_with_importer(
+        invoice["id"],
+        channels=["EMAIL"],
+        contact_email=importer_email,
+    )
+    assert bl_share["email"]["sent"] is True
+    assert mock_send_email.call_count == 1
+    bl_recipient = mock_send_email.call_args[0][0]
+    assert bl_recipient == importer_email
+
+    mock_send_email.reset_mock()
+    agentic_data = agentic_workflow.five_value_snapshot(
+        {},
+        bl_number="BL-EMAIL-ROUTE-AGENTIC",
+        consignee_tin="1000123456",
+        gross_weight=12,
+        no_containers=1,
+        gn83_category="MOTOR_VEHICLE",
+        invoice_type="FULL_SETTLEMENT",
+    )
+    agentic_bl = agentic_workflow.create_agentic_bl(agentic_data)
+    agentic_reviewed = agentic_workflow.issue_agentic_zsad(agentic_bl["id"])
+    agentic_result = agentic_workflow.generate_and_share_agentic_invoice(
+        agentic_reviewed["id"],
+        invoice_type="FULL_SETTLEMENT",
+        email=importer_email,
+        phone="0971234567",
+        channels=["EMAIL"],
+    )
+    assert agentic_result["share_results"]["email"]["sent"] is True
+    mock_send_email.assert_called_once()
+    agentic_recipient = mock_send_email.call_args[0][0]
+    assert agentic_recipient == importer_email

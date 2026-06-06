@@ -64,8 +64,10 @@ def _resolve_loaded_page_module(suffix: str):
 
 
 _reviewed_bl_module = _resolve_loaded_page_module("reviewed_bl")
+_bls_module = _resolve_loaded_page_module("bls")
 detach_zsad_modal = _reviewed_bl_module.detach_zsad_modal
 invoice_request_modal = _reviewed_bl_module.invoice_request_modal
+bl_detach_modal = _bls_module.bl_detach_modal
 
 PUBLIC_PATHS = auth.PUBLIC_PATHS
 WORKFLOW_HIDDEN = {
@@ -147,6 +149,7 @@ app.layout = html.Div(
             children=[
                 invoice_request_modal(),
                 detach_zsad_modal(),
+                bl_detach_modal(),
                 html.Div(id="contract-preview-modal-layer"),
                 agentic_modal(),
             ],

@@ -325,7 +325,6 @@ def layout(**_kwargs):
                 ],
                 className="page-content stack",
             ),
-            _detach_modal(),
         ]
     )
 
@@ -401,7 +400,12 @@ def _save_confirm_modal() -> html.Div:
     )
 
 
-def _detach_modal() -> html.Div:
+_DETACH_MODAL_OPEN_STYLE = {"display": "flex"}
+_DETACH_MODAL_HIDDEN_STYLE = {"display": "none"}
+
+
+def bl_detach_modal() -> html.Div:
+    """Root-level modal (mounted in app zcams-modal-layer)."""
     return html.Div(
         [
             html.Div(
@@ -414,50 +418,51 @@ def _detach_modal() -> html.Div:
                         className="modal-header",
                     ),
                     html.Div(id="bl-detach-body", className="detach-modal-body"),
+                    html.Div(
+                        [
+                            html.Label("Reason for cancellation"),
+                            dcc.Dropdown(
+                                id="bl-cancel-reason",
+                                options=[{"label": r, "value": r} for r in BL_CANCEL_REASONS],
+                                placeholder="Select a reason",
+                                className="form-control",
+                            ),
                             html.Div(
                                 [
-                                    html.Label("Reason for cancellation"),
-                                    dcc.Dropdown(
-                                        id="bl-cancel-reason",
-                                        options=[{"label": r, "value": r} for r in BL_CANCEL_REASONS],
-                                        placeholder="Select a reason",
-                                        className="form-control",
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Label("Other — state the reason"),
-                                            dcc.Textarea(
-                                                id="bl-cancel-reason-detail",
-                                                placeholder="Brief explanation",
-                                                className="form-control textarea",
-                                            ),
-                                        ],
-                                        id="bl-cancel-other-wrap",
-                                        className="stack compact",
-                                        style={"display": "none"},
-                                    ),
-                                    html.Div(
-                                        [
-                                            html.Button("Cancel", id="bl-detach-close-secondary", className="btn-secondary", type="button"),
-                                            html.Button(
-                                                "Detach Z-SAD & cancel record",
-                                                id="bl-detach-submit",
-                                                className="btn-primary",
-                                                type="button",
-                                            ),
-                                        ],
-                                        className="modal-actions",
+                                    html.Label("Other — state the reason"),
+                                    dcc.Textarea(
+                                        id="bl-cancel-reason-detail",
+                                        placeholder="Brief explanation",
+                                        className="form-control textarea",
                                     ),
                                 ],
-                                id="bl-detach-form",
-                                className="stack",
+                                id="bl-cancel-other-wrap",
+                                className="stack compact",
+                                style={"display": "none"},
                             ),
+                            html.Div(
+                                [
+                                    html.Button("Cancel", id="bl-detach-close-secondary", className="btn-secondary", type="button"),
+                                    html.Button(
+                                        "Detach Z-SAD & cancel record",
+                                        id="bl-detach-submit",
+                                        className="btn-primary",
+                                        type="button",
+                                    ),
+                                ],
+                                className="modal-actions",
+                            ),
+                        ],
+                        id="bl-detach-form",
+                        className="stack",
+                    ),
                 ],
                 className="invoice-modal-card detach-modal-card",
             )
         ],
         id="bl-detach-modal",
         className="modal-backdrop is-hidden",
+        style=_DETACH_MODAL_HIDDEN_STYLE,
     )
 
 
@@ -743,11 +748,46 @@ def toggle_other_reason(reason):
     return {"display": "none"}
 
 
+def _detach_modal_hidden():
+    return "modal-backdrop is-hidden", _DETACH_MODAL_HIDDEN_STYLE
+
+
+def _detach_modal_open():
+    return "modal-backdrop", _DETACH_MODAL_OPEN_STYLE
+
+
+@callback(
+    Output("bl-detach-modal", "className", allow_duplicate=True),
+    Output("bl-detach-modal", "style", allow_duplicate=True),
+    Input("bl-detach-close", "n_clicks"),
+    Input("bl-detach-close-secondary", "n_clicks"),
+    prevent_initial_call=True,
+)
+def close_bl_detach_modal_immediate(_close_clicks, _close2_clicks):
+    return _detach_modal_hidden()
+
+
+@callback(
+    Output("bl-duplicate-conflict", "data", allow_duplicate=True),
+    Output("bl-detach-modal", "className", allow_duplicate=True),
+    Output("bl-detach-modal", "style", allow_duplicate=True),
+    Output("bl-detach-body", "children"),
+    Output("bl-detach-form", "style"),
+    Output("bl-cancel-reason", "value"),
+    Output("bl-cancel-reason-detail", "value"),
+    Input("_pages_location", "pathname"),
+    prevent_initial_call=True,
+)
+def reset_bl_detach_modal_on_navigation(_pathname):
+    return None, *_detach_modal_hidden(), None, _DETACH_FORM_VISIBLE, None, None
+
+
 @callback(
     Output("bl-result", "children", allow_duplicate=True),
     Output("bl-table", "children", allow_duplicate=True),
     Output("bl-duplicate-conflict", "data", allow_duplicate=True),
-    Output("bl-detach-modal", "className"),
+    Output("bl-detach-modal", "className", allow_duplicate=True),
+    Output("bl-detach-modal", "style", allow_duplicate=True),
     Output("bl-detach-body", "children"),
     Output("bl-detach-form", "style"),
     Output("bl-cancel-reason", "value"),
@@ -778,7 +818,7 @@ def manage_detach_modal(
             no_update,
             no_update,
             None,
-            "modal-backdrop is-hidden",
+            *_detach_modal_hidden(),
             None,
             _DETACH_FORM_VISIBLE,
             None,
@@ -787,11 +827,13 @@ def manage_detach_modal(
     if trigger == "bl-open-detach":
         if not conflict:
             raise PreventUpdate
+        modal_class, modal_style = _detach_modal_open()
         return (
             no_update,
             no_update,
             conflict,
-            "modal-backdrop",
+            modal_class,
+            modal_style,
             _detach_body(conflict),
             _DETACH_FORM_VISIBLE,
             no_update,
@@ -811,11 +853,13 @@ def manage_detach_modal(
             company_id=company_id,
         )
     except ValueError as exc:
+        modal_class, modal_style = _detach_modal_open()
         return (
             html.Div(str(exc), className="notice error"),
             _bl_table(repository.list_bls(company_id)),
             conflict,
-            "modal-backdrop",
+            modal_class,
+            modal_style,
             _detach_body(conflict),
             _DETACH_FORM_VISIBLE,
             reason,
@@ -839,7 +883,7 @@ def manage_detach_modal(
         notice,
         _bl_table(repository.list_bls(company_id)),
         None,
-        "modal-backdrop is-hidden",
+        *_detach_modal_hidden(),
         None,
         _DETACH_FORM_VISIBLE,
         None,
