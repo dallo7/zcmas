@@ -675,7 +675,11 @@ def queue_bl_upload(contents, filename, user=None):
             html.P(f"Suggested GN 83 category: {gn83_hint}.", className="muted") if gn83_hint else None,
             html.P(extracted.get("ocr_error"), className="muted") if extracted.get("ocr_error") else None,
         ],
-        className="notice success" if mode != "fallback_demo" else "notice",
+        className=(
+            "notice error"
+            if mode == "extraction_failed"
+            else ("notice success" if mode != "fallback_demo" else "notice")
+        ),
     )
     done_pct, done_label = UPLOAD_PROGRESS_STAGES[-1]
     return (

@@ -392,20 +392,34 @@ def extract_text_pdf(file_path: Path) -> str:
 def pdf_to_images(file_path: Path):
     dpi = int(os.getenv("OPENAI_OCR_DPI", "200"))
     max_pages = max(1, int(os.getenv("OPENAI_OCR_MAX_PAGES", "2")))
+    path = Path(file_path)
+    if not path.is_file():
+        raise ValueError(f"PDF not found: {path}")
+
+    fitz_error: Exception | None = None
     try:
         import fitz
         from PIL import Image
 
-        doc = fitz.open(str(file_path))
+        doc = fitz.open(str(path))
         pages = []
         for page in doc[:max_pages]:
             pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72), alpha=False)
             pages.append(Image.frombytes("RGB", [pix.width, pix.height], pix.samples))
-        return pages
-    except Exception:
+        if pages:
+            return pages
+    except Exception as exc:
+        fitz_error = exc
+
+    try:
         from pdf2image import convert_from_path
 
-        return convert_from_path(str(file_path), dpi=dpi, first_page=1, last_page=max_pages)
+        return convert_from_path(str(path), dpi=dpi, first_page=1, last_page=max_pages)
+    except Exception as poppler_exc:
+        details = [f"PyMuPDF failed: {fitz_error}" if fitz_error else "PyMuPDF returned no pages."]
+        details.append(f"pdf2image/poppler failed: {poppler_exc}")
+        details.append("Install poppler-utils (apt) or fix PyMuPDF for scanned PDF OCR.")
+        raise ValueError(" ".join(details)) from poppler_exc
 
 
 def parse_bl_text(text: str) -> dict:

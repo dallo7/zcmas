@@ -12,6 +12,7 @@ from services.repository import (
     change_user_password,
     correct_reviewed_bl_for_asycuda,
     contract_fingerprint,
+    contract_sign_url,
     create_bl,
     create_contract,
     create_company_user,
@@ -96,6 +97,14 @@ def test_invoice_download_url_uses_relative_path_for_localhost(monkeypatch):
 def test_invoice_download_url_uses_public_host_when_configured(monkeypatch):
     monkeypatch.setenv("PUBLIC_APP_URL", "https://zcams.info")
     assert invoice_download_url("inv-test") == "https://zcams.info/download/invoice/inv-test.pdf"
+
+
+def test_contract_sign_url_uses_public_app_url(monkeypatch):
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://zcams.info")
+    url = contract_sign_url("contract-abc123", "importer@example.com")
+    assert url.startswith("https://zcams.info/contract-sign?")
+    assert "contract=contract-abc123" in url
+    assert "email=importer%40example.com" in url
 
 
 def test_list_invoices_for_user_scopes_by_company():

@@ -3227,37 +3227,30 @@ def _new_contract_otp() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def contract_sign_url(contract_id: str, importer_email: str | None = None) -> str:
-    base_url = (
-        os.getenv("ZCAMS_PUBLIC_URL")
+def _public_app_base_url() -> str:
+    """Public site URL for emails and signing links (same as invoice PDF/share URLs)."""
+    return (
+        os.getenv("PUBLIC_APP_URL")
+        or os.getenv("ZCAMS_PUBLIC_URL")
         or os.getenv("APP_BASE_URL")
         or os.getenv("DASH_BASE_URL")
         or "http://127.0.0.1:8050"
-    ).rstrip("/")
+    ).strip().rstrip("/")
+
+
+def contract_sign_url(contract_id: str, importer_email: str | None = None) -> str:
     params = {"contract": contract_id}
     if importer_email:
         params["email"] = importer_email
-    return f"{base_url}/contract-sign?{urlencode(params)}"
+    return f"{_public_app_base_url()}/contract-sign?{urlencode(params)}"
 
 
 def contract_preview_url(contract_id: str) -> str:
-    base_url = (
-        os.getenv("ZCAMS_PUBLIC_URL")
-        or os.getenv("APP_BASE_URL")
-        or os.getenv("DASH_BASE_URL")
-        or "http://127.0.0.1:8050"
-    ).rstrip("/")
-    return f"{base_url}/preview/contract/{contract_id}"
+    return f"{_public_app_base_url()}/preview/contract/{contract_id}"
 
 
 def contract_download_url(contract_id: str) -> str:
-    base_url = (
-        os.getenv("ZCAMS_PUBLIC_URL")
-        or os.getenv("APP_BASE_URL")
-        or os.getenv("DASH_BASE_URL")
-        or "http://127.0.0.1:8050"
-    ).rstrip("/")
-    return f"{base_url}/download/contract/{contract_id}.html"
+    return f"{_public_app_base_url()}/download/contract/{contract_id}.html"
 
 
 def get_contract(contract_id: str) -> dict | None:
@@ -3625,8 +3618,13 @@ def sign_contract_with_otp(
     signature_text: str,
     signature_file_contents: str | None = None,
     signature_file_name: str | None = None,
+    contract_id: str | None = None,
 ) -> dict:
     contract = get_contract_by_no(contract_no)
+    if not contract and contract_id:
+        contract = get_contract(contract_id)
+    if not contract and (contract_no or "").startswith("contract-"):
+        contract = get_contract(contract_no)
     if not contract:
         raise ValueError("Contract ID was not found.")
     if contract.get("status") == "SIGNED":

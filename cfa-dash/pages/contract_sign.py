@@ -213,6 +213,7 @@ def render_signature_preview(signature_text, typed_name):
     Output("sign-contract-result", "children"),
     Output("sign-contract-summary", "children", allow_duplicate=True),
     Input("sign-contract-submit", "n_clicks"),
+    State("sign-contract-internal-id", "data"),
     State("sign-contract-email", "value"),
     State("sign-contract-no", "value"),
     State("sign-contract-otp", "value"),
@@ -222,7 +223,17 @@ def render_signature_preview(signature_text, typed_name):
     State("sign-contract-upload", "filename"),
     prevent_initial_call=True,
 )
-def sign_contract(_n_clicks, email, contract_no, otp, signature_name, signature_text, upload_contents, upload_filename):
+def sign_contract(
+    _n_clicks,
+    internal_contract_id,
+    email,
+    contract_no,
+    otp,
+    signature_name,
+    signature_text,
+    upload_contents,
+    upload_filename,
+):
     try:
         contract = repository.sign_contract_with_otp(
             contract_no=contract_no or "",
@@ -232,6 +243,7 @@ def sign_contract(_n_clicks, email, contract_no, otp, signature_name, signature_
             signature_text=signature_text or signature_name or "",
             signature_file_contents=upload_contents,
             signature_file_name=upload_filename,
+            contract_id=internal_contract_id,
         )
     except ValueError as exc:
         return html.Div(str(exc), className="notice error"), no_update
