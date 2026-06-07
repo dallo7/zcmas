@@ -107,6 +107,13 @@ def test_contract_sign_url_uses_public_app_url(monkeypatch):
     assert "email=importer%40example.com" in url
 
 
+def test_contract_sign_url_uses_zcams_info_when_bird_production_email(monkeypatch):
+    monkeypatch.setenv("PUBLIC_APP_URL", "http://127.0.0.1:8050")
+    monkeypatch.setenv("BIRD_EMAIL_FROM", "no_reply@zcams.info")
+    url = contract_sign_url("contract-localhost-env", "importer@example.com")
+    assert url.startswith("https://zcams.info/contract-sign?")
+
+
 def test_list_invoices_for_user_scopes_by_company():
     super_rows = list_invoices_for_user({"role": "SUPER_ADMIN", "company_id": DEMO_COMPANY_ID})
     company_rows = list_invoices_for_user({"role": "COMPANY_ADMIN", "company_id": DEMO_COMPANY_ID})

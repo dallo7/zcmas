@@ -18,6 +18,26 @@ from typing import Any
 from urllib.parse import urlencode
 
 _APP_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+_PRODUCTION_PUBLIC_APP_URL = "https://zcams.info"
+
+
+def _env_file_values() -> dict[str, str | None]:
+    if not _APP_ENV_FILE.is_file():
+        return {}
+    try:
+        from dotenv import dotenv_values
+    except ImportError:
+        return {}
+    return dotenv_values(_APP_ENV_FILE)
+
+
+def _env_file_value(name: str) -> str:
+    return (str(_env_file_values().get(name) or "")).strip()
+
+
+def _is_local_app_url(url: str) -> bool:
+    lowered = (url or "").lower()
+    return not url or "127.0.0.1" in lowered or "localhost" in lowered
 
 
 def _load_app_env() -> None:
@@ -28,7 +48,7 @@ def _load_app_env() -> None:
     except ImportError:
         return
     current = (os.getenv("PUBLIC_APP_URL") or "").strip()
-    if not current or "127.0.0.1" in current or "localhost" in current.lower():
+    if not current or _is_local_app_url(current):
         load_dotenv(_APP_ENV_FILE, override=True)
     else:
         load_dotenv(_APP_ENV_FILE, override=False)
@@ -3248,13 +3268,33 @@ def _new_contract_otp() -> str:
 
 def _public_app_base_url() -> str:
     """Public site URL for emails and signing links (same as invoice PDF/share URLs)."""
-    return (
+    file_url = _env_file_value("PUBLIC_APP_URL").rstrip("/")
+    env_url = (
         os.getenv("PUBLIC_APP_URL")
         or os.getenv("ZCAMS_PUBLIC_URL")
         or os.getenv("APP_BASE_URL")
         or os.getenv("DASH_BASE_URL")
-        or "http://127.0.0.1:8050"
+        or ""
     ).strip().rstrip("/")
+    bird_from = (
+        os.getenv("BIRD_EMAIL_FROM")
+        or _env_file_value("BIRD_EMAIL_FROM")
+        or ""
+    ).strip().lower()
+    using_production_email = bird_from.endswith("@zcams.info")
+
+    for url in (file_url, env_url):
+        if url and not _is_local_app_url(url):
+            return url
+
+    if using_production_email:
+        return _PRODUCTION_PUBLIC_APP_URL
+
+    if env_url:
+        return env_url
+    if file_url:
+        return file_url
+    return "http://127.0.0.1:8050"
 
 
 def contract_sign_url(contract_id: str, importer_email: str | None = None) -> str:
