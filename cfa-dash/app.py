@@ -3,12 +3,15 @@ from __future__ import annotations
 import os
 import sys
 import uuid
+from pathlib import Path
 
 import dash
 from dash import ALL, Input, Output, State, callback, ctx, dcc, html, no_update
 from dash._pages import PAGE_REGISTRY, _import_layouts_from_pages, _path_to_page
 from dash.exceptions import MissingCallbackContextException, PreventUpdate
 from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 from components.agentic_mode import agentic_modal, render_progress
 from components.layout import sidebar
@@ -19,7 +22,6 @@ from services.invoice_routes import register_invoice_routes
 from services.repository import bootstrap
 
 
-load_dotenv()
 bootstrap()
 
 app = dash.Dash(

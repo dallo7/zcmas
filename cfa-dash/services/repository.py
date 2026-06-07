@@ -17,6 +17,25 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
+_APP_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
+
+def _load_app_env() -> None:
+    if not _APP_ENV_FILE.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    current = (os.getenv("PUBLIC_APP_URL") or "").strip()
+    if not current or "127.0.0.1" in current or "localhost" in current.lower():
+        load_dotenv(_APP_ENV_FILE, override=True)
+    else:
+        load_dotenv(_APP_ENV_FILE, override=False)
+
+
+_load_app_env()
+
 from services import capitalpay
 from services.chat_service import answer_question, clear_document_cache
 from services.db import DATA_DIR, UPLOAD_DIR, connect, init_db, rows_to_dicts
@@ -3261,6 +3280,10 @@ def get_contract_by_no(contract_no: str) -> dict | None:
     return row("SELECT * FROM contracts WHERE contract_no = ?", ((contract_no or "").strip(),))
 
 
+def _contract_sign_link(contract: dict) -> str:
+    return contract_sign_url(contract.get("id"), contract.get("importer_email"))
+
+
 def contract_share_message(contract: dict) -> str:
     return (
         "ZCAMS contract signature request\n\n"
@@ -3269,11 +3292,12 @@ def contract_share_message(contract: dict) -> str:
         f"Registered email: {contract.get('importer_email') or '-'}\n"
         f"OTP: {contract.get('otp') or 'Use the OTP sent to your registered contact.'}\n\n"
         "Open the secure signing link, confirm your email, Contract ID, and OTP, then sign:\n"
-        f"{contract.get('qr_url') or contract_sign_url(contract.get('id'), contract.get('importer_email'))}"
+        f"{_contract_sign_link(contract)}"
     )
 
 
 def contract_email(contract: dict) -> tuple[str, str, str]:
+    sign_url = _contract_sign_link(contract)
     subject = f"ZCAMS Contract {contract.get('contract_no')} signature request"
     text = contract_share_message(contract)
     html = (
@@ -3284,7 +3308,7 @@ def contract_email(contract: dict) -> tuple[str, str, str]:
         f"<tr><td style='padding:6px 12px;font-weight:600'>Registered email</td><td style='padding:6px 12px'>{contract.get('importer_email') or '-'}</td></tr>"
         f"<tr><td style='padding:6px 12px;font-weight:600'>OTP</td><td style='padding:6px 12px'><code>{contract.get('otp') or 'Sent separately'}</code></td></tr>"
         f"</table>"
-        f"<p><a href='{contract.get('qr_url')}' style='display:inline-block;padding:10px 16px;background:#0c270c;color:#fff;border-radius:8px;text-decoration:none'>Review and sign contract</a></p>"
+        f"<p><a href='{sign_url}' style='display:inline-block;padding:10px 16px;background:#0c270c;color:#fff;border-radius:8px;text-decoration:none'>Review and sign contract</a></p>"
         f"<p>Regards,<br/><strong>ZCAMS</strong></p>"
     )
     return subject, text, html
