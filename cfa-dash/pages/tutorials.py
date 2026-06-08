@@ -96,7 +96,7 @@ def layout(**_kwargs):
                                 [
                                     html.H1("ZCAMS Basics", className="basics-page-title"),
                                     html.P(
-                                        "Module guides with Goal, Steps, and Outcome — the same format as in-app Help.",
+                                        "Module guides with Goal, Steps, and Outcome.",
                                         className="basics-page-lead muted",
                                     ),
                                 ],
