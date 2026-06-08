@@ -33,7 +33,10 @@ def main() -> int:
     print("CHAT_MODEL_ENABLED env:", os.getenv("CHAT_MODEL_ENABLED", "(unset, defaults true)"))
     print("Effective chat model enabled:", _chat_model_enabled())
     print("CHAT_MODEL_NAME:", os.getenv("CHAT_MODEL_NAME", "(unset)"))
-    print("CHAT_DEVICE_MAP:", os.getenv("CHAT_DEVICE_MAP", "auto"))
+    print("CHAT_DEVICE_MAP env:", os.getenv("CHAT_DEVICE_MAP", "auto"))
+    from services.chat_service import chat_runtime_device_label
+
+    print("Resolved chat device:", chat_runtime_device_label())
 
     if not _chat_model_enabled():
         print("\nERROR: Chat model disabled. Set CHAT_MODEL_ENABLED=true in .env")
@@ -47,6 +50,13 @@ def main() -> int:
         print("torch:", torch.__version__)
         print("transformers:", transformers.__version__)
         print("cuda available:", torch.cuda.is_available())
+        if torch.cuda.is_available():
+            print("cuda device:", torch.cuda.get_device_name(0))
+        else:
+            print(
+                "No GPU detected. Standard EC2 types (t3, m5, etc.) are CPU-only. "
+                "Use a GPU instance (for example g4dn.xlarge) for faster Qwen replies."
+            )
     except Exception as exc:
         print("Import FAILED:", exc)
         traceback.print_exc()

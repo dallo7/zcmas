@@ -287,6 +287,60 @@ SOURCE_CODE_PROTECTION_PATTERNS = (
     "how was zcams built",
     "implementation details",
     "internal files",
+    "requirements.txt",
+    "pip install",
+    "dependencies",
+    "dependency",
+    "tech stack",
+    "dash version",
+    "python version",
+)
+
+BLOCKED_CORPUS_FILENAMES = frozenset(
+    {
+        "requirements.txt",
+        "readme.md",
+        "agent_modal_out.txt",
+        ".env.example",
+        "pyproject.toml",
+        "setup.py",
+    }
+)
+
+BLOCKED_CORPUS_PARTS = frozenset(
+    {
+        ".venv",
+        ".pytest_cache",
+        ".pytest-tmp",
+        "__pycache__",
+        "tests",
+        "data",
+        "scripts",
+        "services",
+        "components",
+        "pages",
+        "uploads",
+    }
+)
+
+INTERNAL_SNIPPET_MARKERS = (
+    "pip install",
+    "requirements.txt",
+    "dash==",
+    "python-dotenv",
+    "transformers",
+    "pinned from .venv",
+    "def ",
+    "import ",
+    "from services.",
+    "co-authored-by",
+    "pytest",
+)
+
+ZCams_OVERVIEW_ANSWER = (
+    "ZCAMS is the Zambia Customs Agent Management System for clearing agents (CFAs). "
+    "It supports CFA onboarding, Bill of Lading capture and review, Z-SAD generation, GN 83 invoicing, "
+    "CapitalPay Check-out, payment settlement, cargo release, contracts, certificates, and company profile."
 )
 
 CUSTOMS_SCOPE_TERMS = (
@@ -556,6 +610,37 @@ PUBLIC_GENERAL_FAQ = [
 
 
 @lru_cache(maxsize=1)
+def _resolve_chat_device_map() -> str:
+    configured = (os.getenv("CHAT_DEVICE_MAP") or "auto").strip().lower()
+    if configured in {"cpu", "-1", "none"}:
+        return "cpu"
+    if configured not in {"", "auto"}:
+        return configured
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "auto"
+    except ImportError:
+        pass
+    return "cpu"
+
+
+def chat_runtime_device_label() -> str:
+    device_map = _resolve_chat_device_map()
+    if device_map == "cpu":
+        return "cpu"
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return f"cuda ({torch.cuda.get_device_name(0)})"
+    except Exception:
+        pass
+    return device_map
+
+
+@lru_cache(maxsize=1)
 def _pipeline():
     from transformers import pipeline
 
@@ -564,13 +649,14 @@ def _pipeline():
         "text-generation",
         model=model_name,
         tokenizer=model_name,
-        device_map=os.getenv("CHAT_DEVICE_MAP", "auto"),
+        device_map=_resolve_chat_device_map(),
     )
 
 
 def clear_chat_pipeline_cache() -> None:
     """Drop the cached Transformers pipeline (e.g. after model download)."""
     _pipeline.cache_clear()
+    _resolve_chat_device_map.cache_clear()
 
 
 def _chat_model_enabled() -> bool:
@@ -592,6 +678,33 @@ def _match_tokens(value: str) -> set[str]:
 
 def _alias_in_question(alias: str, question: str) -> bool:
     return bool(re.search(rf"\b{re.escape(alias.lower())}\b", (question or "").lower()))
+
+
+def _normalize_question(question: str) -> str:
+    return re.sub(r"[^\w\s-]", "", (question or "").lower()).strip()
+
+
+def _zcams_overview_answer(question: str) -> str | None:
+    q = _normalize_question(question)
+    if q in {"zcams", "what is zcams", "about zcams", "tell me about zcams"}:
+        return ZCams_OVERVIEW_ANSWER
+    return None
+
+
+def _is_safe_corpus_text(text: str) -> bool:
+    lowered = (text or "").lower()
+    return not any(marker in lowered for marker in INTERNAL_SNIPPET_MARKERS)
+
+
+def _is_safe_corpus_source(source: str) -> bool:
+    return source.lower() not in BLOCKED_CORPUS_FILENAMES
+
+
+def _is_safe_snippet(snippet: str) -> bool:
+    source, separator, body = snippet.partition(":")
+    if not separator or not _is_safe_corpus_source(source.strip()):
+        return False
+    return _is_safe_corpus_text(body)
 
 
 def _faq_answer(question: str) -> str | None:
@@ -629,9 +742,8 @@ def _extract_docx_text(path: Path) -> str:
 @lru_cache(maxsize=1)
 def _document_corpus() -> list[tuple[str, str]]:
     corpus = list(APP_KNOWLEDGE)
-    readable_roots = (APP_ROOT, APP_ROOT / "assets", APP_ROOT / "uploads")
+    readable_roots = (APP_ROOT / "assets",)
     allowed_suffixes = {".md", ".txt", ".docx"}
-    blocked_parts = {".venv", ".pytest_cache", ".pytest-tmp", "__pycache__", "tests", "data"}
     seen: set[Path] = set()
 
     for root in readable_roots:
@@ -641,7 +753,9 @@ def _document_corpus() -> list[tuple[str, str]]:
             if path in seen or not path.is_file() or path.suffix.lower() not in allowed_suffixes:
                 continue
             seen.add(path)
-            if blocked_parts.intersection(path.parts):
+            if BLOCKED_CORPUS_PARTS.intersection(path.parts):
+                continue
+            if path.name.lower() in BLOCKED_CORPUS_FILENAMES:
                 continue
             if path.suffix.lower() == ".docx":
                 text = _extract_docx_text(path)
@@ -651,7 +765,7 @@ def _document_corpus() -> list[tuple[str, str]]:
                 except OSError:
                     text = ""
             text = _clean_text(text)
-            if text:
+            if text and _is_safe_corpus_text(text):
                 corpus.append((path.name, text[:4000]))
     return corpus
 
@@ -674,6 +788,8 @@ def _ranked_snippets(question: str, corpus: list[tuple[str, str]], *, limit: int
 
     snippets: list[str] = []
     for _score, source, text in sorted(scored, reverse=True)[:limit]:
+        if not _is_safe_corpus_source(source) or not _is_safe_corpus_text(text):
+            continue
         snippet = text[:snippet_chars]
         snippets.append(f"{source}: {snippet}")
     return snippets
@@ -801,7 +917,9 @@ def _tutorial_context(question: str) -> str:
 def _retrieved_context(question: str) -> str:
     if _chat_question_route(question) != "zcams_workflow":
         return ""
-    return "\n".join(_ranked_snippets(question, _document_corpus(), limit=4, snippet_chars=520))[:MAX_CONTEXT_CHARS]
+    snippets = _ranked_snippets(question, _document_corpus(), limit=4, snippet_chars=520)
+    safe_snippets = [snippet for snippet in snippets if _is_safe_snippet(snippet)]
+    return "\n".join(safe_snippets)[:MAX_CONTEXT_CHARS]
 
 
 def _local_model_answer_from_prompt(
@@ -934,6 +1052,8 @@ def _is_public_visitor_topic(question: str) -> bool:
 
 
 def _getting_started_answer(question: str) -> str | None:
+    if _zcams_overview_answer(question):
+        return PUBLIC_GETTING_STARTED
     q = (question or "").lower()
     if any(term in q for term in ZCAMS_START_TERMS):
         return PUBLIC_GETTING_STARTED
@@ -967,10 +1087,6 @@ def _public_fallback_answer(question: str) -> str:
     tutorial_context = _tutorial_context(question)
     if tutorial_context:
         return _tutorial_answer(question) or _context_answer("Tutorial", tutorial_context)
-
-    document_context = _retrieved_context(question)
-    if document_context:
-        return _context_answer("Reference", document_context)
 
     return (
         "In Zambia, customs, import, export, finance, tax, and legal clearance questions are handled through ZRA "
@@ -1020,10 +1136,6 @@ def _fallback_answer(question: str) -> str:
     if tutorial_context:
         return _tutorial_answer(question) or _context_answer("Tutorial", tutorial_context)
 
-    document_context = _retrieved_context(question)
-    if document_context:
-        return _context_answer("Reference", document_context)
-
     return (
         "I can help with general knowledge and customs operations, including BL review, "
         f"Z-SAD, GN 83, invoices, Check-out, contracts, cargo release, and Support. {HUMAN_SUPPORT_LINE}"
@@ -1049,6 +1161,10 @@ def answer_question(question: str, history: list[dict] | None = None) -> dict:
     if not _is_allowed_scope(question):
         return {"answer": _fallback_answer(question), "mode": "governed"}
 
+    overview = _zcams_overview_answer(question)
+    if overview:
+        return {"answer": _concise_answer(overview), "mode": "faq"}
+
     route = _chat_question_route(question)
     faq = _faq_answer(question)
 
@@ -1069,8 +1185,6 @@ def answer_question(question: str, history: list[dict] | None = None) -> dict:
             }
 
         retrieved_context = _retrieved_context(question)
-        if retrieved_context:
-            return {"answer": _context_answer("Reference", retrieved_context), "mode": "retrieval"}
     else:
         tutorial_context = ""
         retrieved_context = ""
@@ -1140,8 +1254,6 @@ def answer_public_visitor_question(question: str, history: list[dict] | None = N
             }
 
         retrieved_context = _retrieved_context(question)
-        if retrieved_context:
-            return {"answer": _context_answer("Reference", retrieved_context), "mode": "retrieval"}
     else:
         tutorial_context = ""
         retrieved_context = ""

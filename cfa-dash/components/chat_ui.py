@@ -48,11 +48,37 @@ def render_assistant_answer(content: str):
     return html.Div(blocks, className="chat-message-text chat-answer-structured")
 
 
-def render_messages(history: list[dict] | None, *, empty_text: str):
+def render_thinking_bubble(*, label: str = "Reviewing Zambia customs knowledge"):
+    return html.Div(
+        [
+            html.Div("ZCAMS", className="chat-message-author"),
+            html.Div("Thinking", className="chat-message-type"),
+            html.Div(
+                [
+                    html.Span(label, className="chat-thinking-label"),
+                    html.Span(
+                        [
+                            html.Span(className="chat-thinking-dot"),
+                            html.Span(className="chat-thinking-dot"),
+                            html.Span(className="chat-thinking-dot"),
+                        ],
+                        className="chat-thinking-dots",
+                    ),
+                ],
+                className="chat-message-text chat-thinking",
+            ),
+        ],
+        className="chat-message assistant is-thinking",
+    )
+
+
+def render_messages(history: list[dict] | None, *, empty_text: str, thinking: bool = False):
     if not history:
+        if thinking:
+            return [render_thinking_bubble()]
         return html.Div(empty_text, className="chat-empty-state")
 
-    return [
+    messages = [
         html.Div(
             [
                 html.Div("You" if item.get("role") == "user" else "ZCAMS", className="chat-message-author"),
@@ -68,3 +94,6 @@ def render_messages(history: list[dict] | None, *, empty_text: str):
         )
         for item in history
     ]
+    if thinking:
+        messages.append(render_thinking_bubble())
+    return messages

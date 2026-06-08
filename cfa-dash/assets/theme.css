@@ -2023,6 +2023,57 @@ button[data-dash-is-loading="true"] {
   align-items: center;
 }
 
+.chat-message.is-thinking {
+  opacity: 0.96;
+}
+
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.chat-thinking-label {
+  color: var(--muted, #5f6b63);
+  font-size: 0.92rem;
+}
+
+.chat-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-thinking-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--brand-green, #1f6b45);
+  animation: chatThinkingPulse 1.2s ease-in-out infinite;
+}
+
+.chat-thinking-dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.chat-thinking-dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes chatThinkingPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
 .zcams-public-chat-layer {
   position: fixed;
   right: 22px;

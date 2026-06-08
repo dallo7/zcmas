@@ -49,6 +49,7 @@ def floating_public_chat():
                                 className="public-chat-panel-lead muted",
                             ),
                             dcc.Store(id="public-chat-history", data=[]),
+                            dcc.Store(id="public-chat-pending", data=None),
                             html.Div(
                                 render_messages([], empty_text=PUBLIC_CHAT_EMPTY),
                                 id="public-chat-messages",
@@ -129,10 +130,19 @@ def toggle_public_chat_panel(_open, _close, panel_class):
     return panel_class
 
 
+def _resolve_public_question(triggered, question):
+    if isinstance(triggered, dict) and triggered.get("type") == "public-chat-suggest":
+        return (triggered.get("label") or "").strip()
+    return (question or "").strip()
+
+
 @callback(
+    Output("public-chat-pending", "data"),
     Output("public-chat-history", "data"),
     Output("public-chat-messages", "children"),
     Output("public-chat-question", "value"),
+    Output("public-chat-ask", "disabled"),
+    Output("public-chat-clear", "disabled"),
     Input("public-chat-ask", "n_clicks"),
     Input("public-chat-clear", "n_clicks"),
     Input({"type": "public-chat-suggest", "label": ALL}, "n_clicks"),
@@ -140,19 +150,51 @@ def toggle_public_chat_panel(_open, _close, panel_class):
     State("public-chat-history", "data"),
     prevent_initial_call=True,
 )
-def answer_public_chat(_ask, _clear, _suggest_clicks, question, history):
+def queue_public_chat(_ask, _clear, _suggest_clicks, question, history):
     history = list(history or [])
 
     if ctx.triggered_id == "public-chat-clear":
-        return [], render_messages([], empty_text=PUBLIC_CHAT_EMPTY), ""
+        return None, [], render_messages([], empty_text=PUBLIC_CHAT_EMPTY), "", False, False
 
-    triggered = ctx.triggered_id
-    if isinstance(triggered, dict) and triggered.get("type") == "public-chat-suggest":
-        question = triggered.get("label") or ""
-    elif not (question or "").strip():
-        return no_update, no_update, no_update
+    question = _resolve_public_question(ctx.triggered_id, question)
+    if not question:
+        return no_update, no_update, no_update, no_update, no_update, no_update
 
-    user_message = {"role": "user", "content": question.strip()}
-    answer_text = repository.public_chat_answer(question.strip(), history)
-    next_history = [*history, user_message, {"role": "assistant", "content": answer_text}][-24:]
-    return next_history, render_messages(next_history, empty_text=PUBLIC_CHAT_EMPTY), ""
+    user_message = {"role": "user", "content": question}
+    next_history = [*history, user_message][-24:]
+    return (
+        question,
+        next_history,
+        render_messages(next_history, empty_text=PUBLIC_CHAT_EMPTY, thinking=True),
+        "",
+        True,
+        True,
+    )
+
+
+@callback(
+    Output("public-chat-history", "data", allow_duplicate=True),
+    Output("public-chat-messages", "children", allow_duplicate=True),
+    Output("public-chat-pending", "data", allow_duplicate=True),
+    Output("public-chat-ask", "disabled", allow_duplicate=True),
+    Output("public-chat-clear", "disabled", allow_duplicate=True),
+    Input("public-chat-pending", "data"),
+    State("public-chat-history", "data"),
+    prevent_initial_call=True,
+)
+def run_public_chat(pending, history):
+    if not pending:
+        return no_update, no_update, no_update, no_update, no_update
+
+    history = list(history or [])
+    prior = history[:-1] if history and history[-1].get("role") == "user" else history
+    user_message = history[-1] if history and history[-1].get("role") == "user" else {"role": "user", "content": pending}
+    answer_text = repository.public_chat_answer(pending, prior)
+    next_history = [*prior, user_message, {"role": "assistant", "content": answer_text}][-24:]
+    return (
+        next_history,
+        render_messages(next_history, empty_text=PUBLIC_CHAT_EMPTY),
+        None,
+        False,
+        False,
+    )

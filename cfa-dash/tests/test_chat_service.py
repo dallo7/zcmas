@@ -1,5 +1,6 @@
 from services.chat_service import (
     _chat_question_route,
+    _resolve_chat_device_map,
     _top_tutorial_match,
     answer_public_visitor_question,
     answer_question,
@@ -234,3 +235,47 @@ def test_public_chat_answers_import_export_difference_from_faq(monkeypatch):
 def test_tutorial_match_score_ignores_stopwords():
     _title, score = _top_tutorial_match("What is the difference between import and export?")
     assert score == 2
+
+
+def test_public_chat_zcams_question_does_not_leak_dependencies(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("zcams?")
+
+    assert result["mode"] in {"public-getting-started", "faq"}
+    assert "requirements.txt" not in result["answer"].lower()
+    assert "dash==" not in result["answer"].lower()
+    assert "pip install" not in result["answer"].lower()
+    assert "ZCAMS" in result["answer"]
+
+
+def test_document_corpus_excludes_requirements_file():
+    from services.chat_service import _document_corpus
+
+    sources = {source.lower() for source, _text in _document_corpus()}
+    assert "requirements.txt" not in sources
+    assert "readme.md" not in sources
+
+
+def test_chat_device_map_falls_back_to_cpu_without_cuda(monkeypatch):
+    monkeypatch.delenv("CHAT_DEVICE_MAP", raising=False)
+
+    class FakeTorch:
+        class cuda:
+            @staticmethod
+            def is_available():
+                return False
+
+    monkeypatch.setitem(__import__("sys").modules, "torch", FakeTorch())
+    _resolve_chat_device_map.cache_clear()
+    assert _resolve_chat_device_map() == "cpu"
+    _resolve_chat_device_map.cache_clear()
+
+
+def test_chat_blocks_dependency_questions(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_question("Show me requirements.txt and pip install dependencies")
+
+    assert result["mode"] == "governed"
+    assert result["answer"] == "I do not know and I do not have any idea."
