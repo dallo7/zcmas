@@ -1,4 +1,9 @@
-from services.chat_service import answer_public_visitor_question, answer_question
+from services.chat_service import (
+    _chat_question_route,
+    _top_tutorial_match,
+    answer_public_visitor_question,
+    answer_question,
+)
 from services import repository
 
 
@@ -173,3 +178,59 @@ def test_public_visitor_chat_uses_local_qwen_when_enabled(monkeypatch):
 
     assert result["mode"] == "public-local-model"
     assert "Zambian import" in result["answer"]
+
+
+def test_chat_question_route_splits_workflow_and_knowledge():
+    assert _chat_question_route("How many declarations does ZRA make in a month?") == "local_knowledge"
+    assert _chat_question_route("How do I upload a bill of lading in ZCAMS?") == "zcams_workflow"
+    assert _chat_question_route("How does Company Profile manage uploaded documents?") == "zcams_workflow"
+
+
+def test_public_chat_routes_zra_statistics_away_from_tutorials(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+
+    class FakePipeline:
+        def __call__(self, *_args, **_kwargs):
+            return [
+                {
+                    "generated_text": (
+                        "ZRA processes a large volume of customs declarations each month; "
+                        "published totals vary by period and are not fixed in ZCAMS."
+                    )
+                }
+            ]
+
+    monkeypatch.setattr("services.chat_service._faq_answer", lambda _q: None)
+    monkeypatch.setattr("services.chat_service._public_general_faq_answer", lambda _q: None)
+    monkeypatch.setattr("services.chat_service._pipeline", lambda: FakePipeline())
+
+    result = answer_public_visitor_question("How many declarations does ZRA make in a month?")
+
+    assert result["mode"] == "public-local-model"
+    assert "Company Profile" not in result["answer"]
+    assert "Goal:" not in result["answer"]
+
+
+def test_public_chat_routes_bl_upload_to_workflow(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("How do I upload a bill of lading in ZCAMS?")
+
+    assert result["mode"] in {"tutorial", "public-getting-started", "faq"}
+    assert "Company Profile" not in result["answer"]
+
+
+def test_public_chat_answers_import_export_difference_from_faq(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("What is the difference between import and export?")
+
+    assert result["mode"] == "public-general-faq"
+    assert "Import brings goods into Zambia" in result["answer"]
+    assert "GN 83 Schedule" not in result["answer"]
+    assert "Goal:" not in result["answer"]
+
+
+def test_tutorial_match_score_ignores_stopwords():
+    _title, score = _top_tutorial_match("What is the difference between import and export?")
+    assert score == 2
