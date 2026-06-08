@@ -149,8 +149,27 @@ def test_public_visitor_chat_accepts_customs_law_question(monkeypatch):
 
 def test_public_visitor_chat_rejects_unrelated_general_knowledge(monkeypatch):
     monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
 
     result = answer_public_visitor_question("What is the weather forecast for Lusaka this weekend?")
 
     assert result["mode"] == "governed"
     assert "Zambia" in result["answer"]
+
+
+def test_public_visitor_chat_uses_openai_when_configured(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    monkeypatch.setattr(
+        "services.chat_service._openai_public_visitor_answer",
+        lambda *_args, **_kwargs: "Zambian import clearance requires BL, ZRA declaration, and duty assessment.",
+    )
+    monkeypatch.setattr("services.chat_service._faq_answer", lambda _q: None)
+    monkeypatch.setattr("services.chat_service._public_general_faq_answer", lambda _q: None)
+    monkeypatch.setattr("services.chat_service._tutorial_context", lambda _q: "")
+    monkeypatch.setattr("services.chat_service._retrieved_context", lambda _q: "")
+
+    result = answer_public_visitor_question("Tell me about Zambian import documentation in detail.")
+
+    assert result["mode"] == "public-openai"
+    assert "Zambian import" in result["answer"]

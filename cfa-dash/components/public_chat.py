@@ -5,8 +5,8 @@ from components.icons import icon
 from services import repository
 
 PUBLIC_CHAT_EMPTY = (
-    "General knowledge about Zambia: customs, imports, exports, finance and accounts, tax, and law around clearance — "
-    "plus how ZCAMS guides you from CFA registration through cargo release."
+    "General knowledge about Zambia: customs, imports, exports, finance and accounts, tax, and law around clearance. "
+    "ZCAMS guides you from CFA registration through cargo release."
 )
 
 PUBLIC_CHAT_SUGGESTIONS = (
@@ -45,7 +45,7 @@ def floating_public_chat():
                             ),
                             html.P(
                                 "Zambia-only: general knowledge on customs, imports, exports, finance, accounts, tax, "
-                                "and law — plus how ZCAMS works.",
+                                "and law. How ZCAMS works.",
                                 className="public-chat-panel-lead muted",
                             ),
                             dcc.Store(id="public-chat-history", data=[]),

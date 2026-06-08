@@ -428,7 +428,7 @@ Gazette Notice context:
 
 PUBLIC_OUT_OF_SCOPE = (
     "I answer general knowledge about Zambia only — customs, imports, exports, finance and accounts, "
-    "tax, and law around clearance — plus how ZCAMS works. "
+    "tax, and law around clearance. How ZCAMS works. "
     "Try asking what import clearance involves, how GN 83 fees work, or how to register your CFA."
 )
 
@@ -477,6 +477,66 @@ def _pipeline():
         tokenizer=model_name,
         device_map=os.getenv("CHAT_DEVICE_MAP", "auto"),
     )
+
+
+def _resolve_openai_api_key() -> str:
+    try:
+        from services.ocr import _resolve_openai_api_key as resolve_key
+
+        return resolve_key()
+    except Exception:
+        key = (os.getenv("OPENAI_API_KEY") or "").strip()
+        return key if key.startswith("sk-") else ""
+
+
+def _openai_chat_model() -> str:
+    return (
+        os.getenv("OPENAI_CHAT_MODEL")
+        or os.getenv("OPENAI_OCR_MODEL")
+        or "gpt-4o-mini"
+    ).strip()
+
+
+def _openai_public_visitor_answer(
+    question: str,
+    history: list[dict] | None,
+    *,
+    faq: str | None,
+    general: str | None,
+    tutorial_context: str,
+    retrieved_context: str,
+) -> str | None:
+    api_key = _resolve_openai_api_key()
+    if not api_key:
+        return None
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+        context_block = (
+            f"FAQ candidate:\n{faq or general or 'No direct FAQ match.'}\n\n"
+            f"ZCAMS getting started:\n{PUBLIC_GETTING_STARTED}\n\n"
+            f"Tutorials:\n{tutorial_context or 'None.'}\n\n"
+            f"Documents:\n{retrieved_context or 'None.'}"
+        )
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": f"{PUBLIC_VISITOR_SYSTEM_PROMPT}\n\n{context_block}"},
+        ]
+        for item in (history or [])[-6:]:
+            role = "user" if item.get("role") == "user" else "assistant"
+            content = _clean_text(str(item.get("content") or ""))
+            if content:
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": question})
+        response = client.chat.completions.create(
+            model=_openai_chat_model(),
+            messages=messages,
+            max_tokens=400,
+        )
+        text = (response.choices[0].message.content or "").strip()
+        return _concise_answer(text, max_chars=560) if text else None
+    except Exception:
+        return None
 
 
 def _clean_text(value: str) -> str:
@@ -927,6 +987,17 @@ def answer_public_visitor_question(question: str, history: list[dict] | None = N
 
     if retrieved_context:
         return {"answer": _context_answer("Reference", retrieved_context), "mode": "retrieval"}
+
+    openai_answer = _openai_public_visitor_answer(
+        question,
+        history,
+        faq=faq,
+        general=general,
+        tutorial_context=tutorial_context,
+        retrieved_context=retrieved_context,
+    )
+    if openai_answer:
+        return {"answer": openai_answer, "mode": "public-openai"}
 
     if os.getenv("CHAT_MODEL_ENABLED", "false").lower() != "true":
         return {"answer": _public_fallback_answer(question), "mode": "public-fallback"}
