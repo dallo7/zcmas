@@ -3112,6 +3112,16 @@ def list_contracts(company_id: str | None = DEMO_COMPANY_ID) -> list[dict]:
     return rows(query, params)
 
 
+def list_signed_contracts(company_id: str | None = DEMO_COMPANY_ID) -> list[dict]:
+    query = "SELECT * FROM contracts WHERE status = 'SIGNED'"
+    params: tuple[Any, ...] = ()
+    if company_id is not None:
+        query += " AND company_id = ?"
+        params = (company_id,)
+    query += " ORDER BY COALESCE(signed_at, created_at) DESC"
+    return rows(query, params)
+
+
 def count_unedited_contracts(company_id: str | None = DEMO_COMPANY_ID) -> int:
     query = "SELECT COUNT(*) AS count FROM contracts WHERE status = 'DRAFT'"
     params: tuple[Any, ...] = ()

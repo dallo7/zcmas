@@ -30,6 +30,7 @@ from services.repository import (
     invoice_capitalpay_number,
     invoice_share_message,
     list_invoices_for_user,
+    list_signed_contracts,
     list_system_users,
     resend_user_credentials,
     review_bl,
@@ -534,6 +535,34 @@ def test_contract_signing_requires_otp_and_stores_fingerprint():
         signature_text=signed["signature_text"],
     )
     assert tampered_hash != signed["contract_hash"]
+
+
+def test_list_signed_contracts_is_scoped_to_company():
+    bootstrap()
+    signed = create_contract(
+        "Signed Register Importer",
+        "260971666666",
+        "signed-register@example.com",
+        company_id=DEMO_COMPANY_ID,
+    )
+    sign_contract_with_otp(
+        contract_no=signed["contract_no"],
+        email="signed-register@example.com",
+        otp=signed["otp"],
+        signature_name="Signed Register Importer",
+        signature_text="Signed Register Importer",
+    )
+    draft = create_contract(
+        "Draft Only Importer",
+        "260971777777",
+        "draft-only@example.com",
+        company_id=DEMO_COMPANY_ID,
+    )
+    rows = list_signed_contracts(DEMO_COMPANY_ID)
+    contract_nos = {row.get("contract_no") for row in rows}
+    assert signed["contract_no"] in contract_nos
+    assert draft["contract_no"] not in contract_nos
+    assert all(row.get("status") == "SIGNED" for row in rows)
 
 
 def test_contract_send_blocks_immediate_duplicate_email(monkeypatch):

@@ -222,6 +222,13 @@ app.validation_layout = html.Div(
                 html.Div(id="tutorial-slide-stage"),
                 html.Div(id="tutorial-progress"),
                 html.Span(id="tutorial-counter"),
+                dcc.Input(id="contracts-search"),
+                html.Button(id="contracts-prev", n_clicks=0, type="button"),
+                html.Button(id="contracts-next", n_clicks=0, type="button"),
+                html.Span(id="contracts-page-label"),
+                html.Div(id="contract-register"),
+                dcc.Store(id="contracts-page"),
+                dcc.Store(id="contracts-refresh-token"),
             ],
         ),
     ]

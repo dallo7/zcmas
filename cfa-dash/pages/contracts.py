@@ -174,12 +174,39 @@ def layout(**_kwargs):
                         [
                             html.H2("Contract Register"),
                             html.P(
-                                "Search existing contracts, signature status, hashes, and importer details for follow-up.",
+                                "Search signed contracts for your company — importer details, signature status, and hash fingerprints.",
                                 className="muted section-lead",
                             ),
-                            _table_toolbar("contracts-search", "Search contracts by number, importer, email, status, signature, or fingerprint..."),
-                            html.Div(id="contract-register"),
-                            html.Div(id="contracts-pagination"),
+                            _table_toolbar("contracts-search", "Search by contract number, importer, email, signature, or fingerprint..."),
+                            html.Div(
+                                html.P("Loading signed contracts...", className="muted"),
+                                id="contract-register",
+                            ),
+                            html.Div(
+                                [
+                                    html.Button(
+                                        "Previous",
+                                        id="contracts-prev",
+                                        className="btn-secondary compact",
+                                        type="button",
+                                        disabled=True,
+                                    ),
+                                    html.Span(
+                                        "Page 1 of 1 | 0 records",
+                                        id="contracts-page-label",
+                                        className="muted",
+                                    ),
+                                    html.Button(
+                                        "Next",
+                                        id="contracts-next",
+                                        className="btn-secondary compact",
+                                        type="button",
+                                        disabled=True,
+                                    ),
+                                ],
+                                id="contracts-pagination",
+                                className="table-pagination",
+                            ),
                         ],
                         className="card section-card",
                     ),
@@ -197,7 +224,7 @@ def _table_toolbar(search_id: str, placeholder: str):
     return html.Div(
         [
             icon("lucide:search", 15),
-            dcc.Input(id=search_id, placeholder=placeholder, className="form-control table-search-input"),
+            dcc.Input(id=search_id, placeholder=placeholder, className="form-control table-search-input", debounce=True),
         ],
         className="table-toolbar",
     )
@@ -208,7 +235,8 @@ def _matches_text(values: list, search: str | None) -> bool:
     if not term:
         return True
     haystack = " ".join(str(value or "") for value in values).lower()
-    return all(part in haystack for part in term.split())
+    parts = [part for part in term.split() if part]
+    return any(part in haystack for part in parts)
 
 
 def _contract_matches(contract: dict, search: str | None) -> bool:
@@ -237,17 +265,16 @@ def _page_rows(rows: list[dict], page: int | None) -> tuple[list[dict], int, int
 
 def _pagination_controls(total_rows: int, page: int, total_pages: int | None = None):
     total_pages = total_pages or max(1, ((total_rows - 1) // TABLE_PAGE_SIZE) + 1)
-    return html.Div(
-        [
-            html.Button("Previous", id="contracts-prev", className="btn-secondary compact", type="button", disabled=page <= 1),
-            html.Span(f"Page {page} of {total_pages} | {total_rows} records", className="muted"),
-            html.Button("Next", id="contracts-next", className="btn-secondary compact", type="button", disabled=page >= total_pages),
-        ],
-        className="table-pagination",
+    return (
+        page <= 1,
+        f"Page {page} of {total_pages} | {total_rows} signed",
+        page >= total_pages,
     )
 
 
 def _contract_register(contracts: list[dict]):
+    if not contracts:
+        return html.P("No signed contracts yet. Send a contract for signature — it will appear here once the importer signs.", className="muted")
     return status_table(
         ["Contract", "Importer", "Status", "Signature", "Share"],
         [
@@ -333,7 +360,9 @@ def _contract_register(contracts: list[dict]):
 
 @callback(
     Output("contract-register", "children"),
-    Output("contracts-pagination", "children"),
+    Output("contracts-page-label", "children"),
+    Output("contracts-prev", "disabled"),
+    Output("contracts-next", "disabled"),
     Output("contracts-page", "data"),
     Input("_pages_location", "pathname"),
     Input("auth-user", "data"),
@@ -347,18 +376,23 @@ def _contract_register(contracts: list[dict]):
 def render_contract_register(pathname, user, _refresh_token, search, _prev, _next, page):
     if (pathname or "") != "/contracts":
         raise PreventUpdate
-    company_id = None if (user or {}).get("role") == "SUPER_ADMIN" else (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    if not user:
+        return html.P("Loading signed contracts...", className="muted"), "Page 1 of 1 | 0 signed", True, True, 1
+    company_id = None if user.get("role") == "SUPER_ADMIN" else user.get("company_id") or repository.DEMO_COMPANY_ID
     trigger = ctx.triggered_id
     requested_page = int(page or 1)
     if trigger == "contracts-prev":
         requested_page -= 1
     elif trigger == "contracts-next":
         requested_page += 1
-    else:
+    elif trigger in {"contracts-search", "auth-user", "contracts-refresh-token", "_pages_location"}:
         requested_page = 1
-    contracts = [row for row in repository.list_contracts(company_id) if _contract_matches(row, search)]
+    contracts = [
+        row for row in repository.list_signed_contracts(company_id) if _contract_matches(row, search)
+    ]
     visible, current_page, total_pages = _page_rows(contracts, requested_page)
-    return _contract_register(visible), _pagination_controls(len(contracts), current_page, total_pages), current_page
+    prev_disabled, page_label, next_disabled = _pagination_controls(len(contracts), current_page, total_pages)
+    return _contract_register(visible), page_label, prev_disabled, next_disabled, current_page
 
 
 def _shipment_cards(contract: dict):
