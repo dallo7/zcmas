@@ -57,7 +57,7 @@ def _load_app_env() -> None:
 _load_app_env()
 
 from services import capitalpay
-from services.chat_service import answer_question, clear_document_cache
+from services.chat_service import answer_public_visitor_question, answer_question, clear_document_cache
 from services.db import DATA_DIR, UPLOAD_DIR, connect, init_db, rows_to_dicts
 from services.gn83 import billable_units, calculate_invoice, gn83_quote_for_reviewed, lookup_fee
 from services.messaging import (
@@ -3901,4 +3901,13 @@ def chat_answer(question: str, history: list[dict] | None = None, user: dict | N
     mode = result.get("mode") or "unknown"
     quality = classify_chat_response(question, answer, mode)
     record_chat_event(question, answer, mode, quality, user=user)
+    return answer
+
+
+def public_chat_answer(question: str, history: list[dict] | None = None) -> str:
+    result = answer_public_visitor_question(question, history=history)
+    answer = result["answer"]
+    mode = result.get("mode") or "public-visitor"
+    quality = classify_chat_response(question, answer, mode)
+    record_chat_event(question, answer, mode, quality, user=None)
     return answer

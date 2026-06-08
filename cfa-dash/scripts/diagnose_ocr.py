@@ -39,7 +39,12 @@ def main() -> int:
     if pdf.is_file():
         print("pdf size bytes:", pdf.stat().st_size)
     print("OPENAI_API_KEY set:", bool(os.getenv("OPENAI_API_KEY")))
+    print("OCR_API_KEY:", repr(os.getenv("OCR_API_KEY") or ""))
+    print("OCR_IMAGE_PROVIDER:", os.getenv("OCR_IMAGE_PROVIDER", "(unset)"))
     print("OCR_PROVIDER:", os.getenv("OCR_PROVIDER", "(unset)"))
+    from services.ocr import _resolve_openai_api_key
+
+    print("Resolved OpenAI key usable:", bool(_resolve_openai_api_key()))
 
     section("Dependencies")
     try:

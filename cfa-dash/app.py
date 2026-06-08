@@ -15,6 +15,8 @@ load_dotenv(Path(__file__).resolve().parent / ".env", override=True)
 
 from components.agentic_mode import agentic_modal, render_progress
 from components.layout import sidebar
+from components.public_chat import floating_public_chat
+import components.public_chat  # noqa: F401 — registers visitor chat callbacks
 from components.workflow import workflow_strip
 from components.icons import icon
 from services import agentic_workflow, auth, repository
@@ -156,6 +158,7 @@ app.layout = html.Div(
                 agentic_modal(),
             ],
         ),
+        floating_public_chat(),
     ],
     id="zcams-root",
     className="theme-light",
@@ -229,6 +232,16 @@ app.validation_layout = html.Div(
                 html.Div(id="contract-register"),
                 dcc.Store(id="contracts-page"),
                 dcc.Store(id="contracts-refresh-token"),
+                html.Button(id="public-chat-toggle", n_clicks=0, type="button"),
+                html.Button(id="public-chat-close", n_clicks=0, type="button"),
+                html.Button(id="public-chat-ask", n_clicks=0, type="button"),
+                html.Button(id="public-chat-clear", n_clicks=0, type="button"),
+                dcc.Textarea(id="public-chat-question"),
+                dcc.Store(id="public-chat-history"),
+                html.Div(id="public-chat-messages"),
+                html.Div(id="public-chat-panel", className="public-chat-panel"),
+                html.Div(id="public-chat-layer", className="zcams-public-chat-layer"),
+                html.Button(id={"type": "public-chat-suggest", "label": "__validation__"}, n_clicks=0, type="button"),
             ],
         ),
     ]

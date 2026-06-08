@@ -8,6 +8,61 @@ import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 
+_APP_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+_PLACEHOLDER_API_KEYS = frozenset({"openai", "chandra", "mock", ""})
+
+
+def _is_usable_openai_key(value: str | None) -> bool:
+    key = (value or "").strip()
+    if not key or key.lower() in _PLACEHOLDER_API_KEYS:
+        return False
+    if key.lower().startswith("datalab-to/"):
+        return False
+    return key.startswith("sk-")
+
+
+def _env_file_values() -> dict[str, str | None]:
+    if not _APP_ENV_FILE.is_file():
+        return {}
+    try:
+        from dotenv import dotenv_values
+    except ImportError:
+        return {}
+    return dotenv_values(_APP_ENV_FILE)
+
+
+def _load_ocr_env() -> None:
+    if not _APP_ENV_FILE.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(_APP_ENV_FILE, override=False)
+    if _is_usable_openai_key(os.getenv("OPENAI_API_KEY")):
+        return
+    for name in ("OPENAI_API_KEY", "OCR_API_KEY"):
+        value = (_env_file_values().get(name) or "").strip()
+        if _is_usable_openai_key(value):
+            os.environ["OPENAI_API_KEY"] = value
+            return
+
+
+def _resolve_openai_api_key() -> str:
+    _load_ocr_env()
+    for name in ("OPENAI_API_KEY", "OCR_API_KEY"):
+        value = (os.getenv(name) or "").strip()
+        if _is_usable_openai_key(value):
+            return value
+    return ""
+
+
+def _image_ocr_provider() -> str:
+    return (os.getenv("OCR_IMAGE_PROVIDER") or os.getenv("OCR_PROVIDER") or "openai").strip().lower()
+
+
+_load_ocr_env()
+
 
 DEMO_EXTRACTION = {
     "bl_number": "BL-ZM-KBCX",
@@ -133,12 +188,13 @@ def extract_bl_fields(file_path: str | None = None) -> dict:
 
     path = Path(file_path)
     provider = os.getenv("OCR_PROVIDER", "openai").lower()
+    image_provider = _image_ocr_provider()
     try:
         if path.suffix.lower() == ".pdf":
             text, mode, ocr_provider = route_pdf_text(path)
             return _build_extraction_result(parse_bl_text(text), text, ocr_provider, mode)
-        if provider == "mock":
-            raise ValueError("Image uploads require OpenAI OCR. Set OCR_PROVIDER=openai and OPENAI_API_KEY.")
+        if image_provider == "mock":
+            raise ValueError("Image uploads require OpenAI OCR. Set OCR_IMAGE_PROVIDER=openai and OPENAI_API_KEY.")
         text, mode = extract_text_with_openai(path, pdf_image=False)
         return _build_extraction_result(parse_bl_text(text), text, "openai", mode)
     except Exception as exc:
@@ -153,10 +209,11 @@ def extract_bl_fields(file_path: str | None = None) -> dict:
 def route_pdf_text(path: Path) -> tuple[str, str, str]:
     """Try embedded PDF text first; fall back to OpenAI image OCR when empty or slow."""
     provider = os.getenv("OCR_PROVIDER", "openai").lower()
+    image_provider = _image_ocr_provider()
 
     if _pdf_likely_scanned(path):
-        if provider == "mock":
-            raise ValueError("Scanned PDF requires OpenAI OCR. Set OCR_PROVIDER=openai and OPENAI_API_KEY.")
+        if image_provider == "mock":
+            raise ValueError("Scanned PDF requires OpenAI OCR. Set OCR_IMAGE_PROVIDER=openai and OPENAI_API_KEY.")
         text, mode = extract_text_with_openai(path, pdf_image=True)
         return text, mode, "openai"
 
@@ -165,8 +222,8 @@ def route_pdf_text(path: Path) -> tuple[str, str, str]:
     if not timed_out and text.strip():
         return text, "text_pdf", "pypdf" if provider != "mock" else "mock"
 
-    if provider == "mock":
-        raise ValueError("Scanned PDF requires OpenAI OCR. Set OCR_PROVIDER=openai and OPENAI_API_KEY.")
+    if image_provider == "mock":
+        raise ValueError("Scanned PDF requires OpenAI OCR. Set OCR_IMAGE_PROVIDER=openai and OPENAI_API_KEY.")
     text, mode = extract_text_with_openai(path, pdf_image=True)
     return text, mode, "openai"
 
@@ -198,7 +255,7 @@ def _extract_text_pdf_timed(path: Path, timeout_sec: float) -> tuple[str, bool]:
 
 def _build_extraction_result(fields: dict, text: str, provider: str, mode: str) -> dict:
     structured = {}
-    if os.getenv("OCR_PROVIDER", "openai").lower() == "openai" and os.getenv("OPENAI_API_KEY"):
+    if _resolve_openai_api_key():
         try:
             structured = extract_structured_bl_json(text)
         except Exception as exc:
@@ -217,7 +274,10 @@ def extract_structured_bl_json(text: str) -> dict:
     """Ask the configured AI model to return the full BL/AWB customs schema."""
     from openai import OpenAI
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    api_key = _resolve_openai_api_key()
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY is required for structured BL extraction.")
+    client = OpenAI(api_key=api_key)
     model = os.getenv("OPENAI_BL_EXTRACTION_MODEL", os.getenv("OPENAI_OCR_MODEL", "gpt-5.4-mini"))
     store = os.getenv("OPENAI_OCR_STORE", "false").lower() == "true"
     response = client.responses.create(
@@ -309,9 +369,12 @@ def extract_text_with_openai(file_path: Path, *, pdf_image: bool | None = None) 
     if text_pdf is not None:
         return text_pdf, mode
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = _resolve_openai_api_key()
     if not api_key:
-        raise ValueError("OPENAI_API_KEY is required for OpenAI OCR on scanned PDFs/images.")
+        raise ValueError(
+            "OPENAI_API_KEY is required for OpenAI OCR on scanned PDFs/images. "
+            "Set OPENAI_API_KEY=sk-... in cfa-dash/.env (leave OCR_API_KEY empty) and restart ZCAMS."
+        )
 
     if not pages:
         return "", mode

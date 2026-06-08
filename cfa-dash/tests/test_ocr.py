@@ -75,12 +75,22 @@ def test_parse_maersk_two_container_bl():
     assert parsed["gross_weight"] == 54.13
 
 
+def test_resolve_openai_api_key_ignores_placeholder_ocr_api_key(monkeypatch, tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("OCR_API_KEY=openai\nOPENAI_API_KEY=sk-prod-key-from-file\n", encoding="utf-8")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OCR_API_KEY", "openai")
+    monkeypatch.setattr(ocr, "_APP_ENV_FILE", env_file)
+
+    assert ocr._resolve_openai_api_key() == "sk-prod-key-from-file"
+
+
 def test_image_pdf_routes_through_openai_ocr(monkeypatch, tmp_path):
     pdf_path = tmp_path / "image-only-bl.pdf"
     pdf_path.write_bytes(b"%PDF-1.4 image-only placeholder")
 
     monkeypatch.setenv("OCR_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
     monkeypatch.setattr(ocr, "extract_text_pdf", lambda _path: "")
     monkeypatch.setattr(ocr, "pdf_to_images", lambda _path: [object()])
     monkeypatch.setattr(ocr, "extract_structured_bl_json", lambda _text: STRUCTURED_SAMPLE)
@@ -106,7 +116,7 @@ def test_pdf_router_uses_text_pdf_when_fast_text(monkeypatch, tmp_path):
     pdf_path.write_bytes(b"%PDF-1.4")
 
     monkeypatch.setenv("OCR_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
     monkeypatch.setattr(ocr, "_pdf_likely_scanned", lambda _path: False)
 
     def fail_openai(*_args, **_kwargs):
@@ -152,6 +162,28 @@ def test_pdf_router_falls_back_when_text_extraction_is_slow(monkeypatch, tmp_pat
     assert result["ocr_provider"] == "openai"
     assert result["ocr_mode"] == "image_pdf_ocr"
     assert result["bl_number"] == "IMG999999"
+
+
+def test_image_pdf_uses_ocr_image_provider_when_ocr_provider_is_chandra(monkeypatch, tmp_path):
+    pdf_path = tmp_path / "image-only-bl.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 image-only placeholder")
+
+    monkeypatch.setenv("OCR_PROVIDER", "chandra")
+    monkeypatch.setenv("OCR_IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setattr(ocr, "extract_text_pdf", lambda _path: "")
+    monkeypatch.setattr(ocr, "pdf_to_images", lambda _path: [object()])
+    monkeypatch.setattr(ocr, "extract_structured_bl_json", lambda _text: STRUCTURED_SAMPLE)
+    monkeypatch.setattr(
+        ocr,
+        "extract_text_with_openai",
+        lambda _path, pdf_image=False: ("Bill of Lading No: IMG123456 Consignee: Image Importer", "image_pdf_ocr"),
+    )
+
+    result = extract_bl_fields(str(pdf_path))
+
+    assert result["ocr_provider"] == "openai"
+    assert result["ocr_mode"] == "image_pdf_ocr"
 
 
 def test_parse_cma_three_container_loose_bl():

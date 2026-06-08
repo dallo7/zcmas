@@ -2023,6 +2023,142 @@ button[data-dash-is-loading="true"] {
   align-items: center;
 }
 
+.zcams-public-chat-layer {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 1200;
+  pointer-events: none;
+}
+
+.zcams-public-chat-layer.is-hidden {
+  display: none;
+}
+
+.zcams-public-chat-layer .public-chat-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+.public-chat-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 999px;
+  color: #0c270c;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, #f5b700 0%, #ff8c00 100%);
+  box-shadow: 0 16px 36px rgba(245, 183, 0, 0.34);
+  cursor: pointer;
+}
+
+.public-chat-fab:hover {
+  transform: translateY(-1px);
+}
+
+.public-chat-panel {
+  display: none;
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(72vh, 640px);
+  overflow: hidden;
+  border: 1px solid rgba(12, 39, 12, 0.12);
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(12, 39, 12, 0.18);
+}
+
+.public-chat-panel.is-open {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.public-chat-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.public-chat-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0c270c;
+  font-size: 15px;
+}
+
+.public-chat-panel-lead {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.public-chat-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--mist-200);
+  border-radius: 999px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.public-chat-window {
+  min-height: 220px;
+  max-height: 320px;
+}
+
+.public-chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.public-chat-suggest {
+  border: 1px solid rgba(12, 39, 12, 0.12);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(245, 251, 243, 0.9);
+  color: #0c270c;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.public-chat-input {
+  min-height: 84px;
+}
+
+@media (max-width: 640px) {
+  .zcams-public-chat-layer {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .public-chat-fab span {
+    display: none;
+  }
+
+  .public-chat-fab {
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
 .btn-primary,
 .btn-secondary,
 .icon-button {

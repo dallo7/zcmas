@@ -2,6 +2,7 @@ from dash import dcc, html
 
 from components.agentic_mode import agentic_button
 from components.icons import icon
+from components.tutorial_guide import render_tutorial_guide
 from components.workflow import breadcrumb, counts_for_nav, nav_badge, workflow_strip
 
 
@@ -473,46 +474,7 @@ def sidebar(pathname: str = "/dashboard", user: dict | None = None):
 
 
 def module_help(title: str, text: str):
-    tutorial = PAGE_TUTORIALS.get(title)
-    if tutorial:
-        content = [
-            html.H4(title),
-            html.P(text.rstrip(".") + ".", className="help-intro help-summary"),
-            html.Div(
-                [
-                    html.Span("Goal", className="help-label help-label-goal"),
-                    html.P(tutorial["objective"], className="help-objective"),
-                ],
-                className="help-section help-section-goal",
-            ),
-            html.Div(
-                [
-                    html.Span("Steps", className="help-label help-label-steps"),
-                    html.Ol(
-                        [
-                            html.Li(
-                                [
-                                    html.Span(str(index), className="help-step-number"),
-                                    html.Span(step, className="help-step-copy"),
-                                ]
-                            )
-                            for index, step in enumerate(tutorial["steps"], start=1)
-                        ],
-                        className="help-steps",
-                    ),
-                ],
-                className="help-section help-section-steps",
-            ),
-            html.Div(
-                [
-                    html.Span("Outcome", className="help-label help-label-outcome"),
-                    html.P(tutorial["outcome"], className="help-outcome-text"),
-                ],
-                className="help-outcome",
-            ),
-        ]
-    else:
-        content = [html.H4(title), html.P(text)]
+    content = render_tutorial_guide(title, text, tutorials=PAGE_TUTORIALS)
     return html.Details(
         [
             html.Summary([icon("lucide:circle-help", 14), " Help"]),

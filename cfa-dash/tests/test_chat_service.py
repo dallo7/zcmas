@@ -1,4 +1,4 @@
-from services.chat_service import answer_question
+from services.chat_service import answer_public_visitor_question, answer_question
 from services import repository
 
 
@@ -99,3 +99,58 @@ def test_repository_chat_answer_records_quality(monkeypatch):
     assert events[0]["question"] == question
     assert events[0]["quality"] == "Good Response"
     assert events[0]["mode"] == "faq"
+
+
+def test_public_visitor_chat_scoped_to_zambia(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("How does ZCAMS work?")
+
+    assert result["mode"] == "public-getting-started"
+    assert "Register your CFA" in result["answer"]
+
+
+def test_public_visitor_chat_rejects_other_countries(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("What are Kenya customs duties for imports?")
+
+    assert result["mode"] == "governed"
+    assert "Zambia" in result["answer"]
+
+
+def test_public_visitor_chat_accepts_zambia_tax_question(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("What VAT applies on a ZCAMS Full Settlement invoice in Zambia?")
+
+    assert result["mode"] == "faq"
+    assert "VAT" in result["answer"]
+
+
+def test_public_visitor_chat_accepts_general_import_knowledge(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("What is import clearance?")
+
+    assert result["mode"] == "public-general-faq"
+    assert "Zambia" in result["answer"]
+    assert "import" in result["answer"].lower()
+
+
+def test_public_visitor_chat_accepts_customs_law_question(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("Explain customs law compliance for clearing agents")
+
+    assert result["mode"] == "public-general-faq"
+    assert "GN 83" in result["answer"]
+
+
+def test_public_visitor_chat_rejects_unrelated_general_knowledge(monkeypatch):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+
+    result = answer_public_visitor_question("What is the weather forecast for Lusaka this weekend?")
+
+    assert result["mode"] == "governed"
+    assert "Zambia" in result["answer"]
