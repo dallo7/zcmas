@@ -102,7 +102,8 @@ def layout(**_kwargs):
                 ],
                 className="public-contract-shell",
             ),
-        ]
+        ],
+        className="public-page contract-sign-page",
     )
 
 
@@ -119,7 +120,7 @@ def _contract_summary(contract: dict | None):
         )
     company_id = contract.get("company_id") or repository.DEMO_COMPANY_ID
     company = repository.get_company(company_id)
-    logo_url = repository.company_logo_url(company_id)
+    logo_url = repository.company_logo_href(company_id)
     shipment = repository.parse_shipment_details(contract.get("shipment_details"))
     return html.Div(
         [

@@ -41,6 +41,7 @@ def layout(**_kwargs):
             dcc.Store(id="profile-pending-user-action"),
             dcc.Store(id="profile-users-page", data=1),
             dcc.Store(id="profile-docs-page", data=1),
+            dcc.Store(id="profile-logo-pending"),
             html.Div(
                 html.Div(
                     [
@@ -127,7 +128,7 @@ def _field(field_id: str, label: str, value: str | None):
 
 def _profile_content(company: dict, certs: list[dict], users: list[dict], score: int, unedited_contracts: int):
     company_id = company.get("id") or repository.DEMO_COMPANY_ID
-    logo_url = repository.company_logo_url(company_id)
+    logo_url = repository.company_logo_href(company_id)
     return [
         html.Div(
             [
@@ -517,21 +518,24 @@ def show_selected_company_document(filename, contents):
 @callback(
     Output("profile-logo-selected", "children"),
     Output("company-logo-frame", "children"),
+    Output("profile-logo-pending", "data"),
     Input("profile-logo-upload", "filename"),
     Input("profile-logo-upload", "contents"),
     prevent_initial_call=True,
 )
 def show_selected_company_logo(filename, contents):
     if not filename:
-        return "", no_update
+        return "", no_update, no_update
     if not contents:
-        return html.Div(f"Waiting to import logo: {filename}", className="muted"), no_update
+        return html.Div(f"Waiting to import logo: {filename}", className="muted"), no_update, no_update
+    pending = {"filename": filename, "contents": contents}
     return (
         html.Div(
             f"Logo imported: {filename}. It will replace the current logo when you click Save Company Profile.",
             className="notice success compact",
         ),
         html.Img(src=contents, className="company-logo-preview"),
+        pending,
     )
 
 
@@ -613,6 +617,7 @@ def profile_document_actions(
     Output("profile-pending-user-action", "data"),
     Output("profile-confirm-message", "children"),
     Output("profile-confirm-popup", "className"),
+    Output("profile-logo-pending", "data", allow_duplicate=True),
     Input("save-company-profile", "n_clicks"),
     Input("create-company-user", "n_clicks"),
     Input({"type": "profile-user-edit", "id": ALL}, "n_clicks"),
@@ -630,6 +635,7 @@ def profile_document_actions(
     *[State(f"profile-{field_id}", "value") for field_id, _label in PROFILE_FIELDS],
     State("profile-logo-upload", "filename"),
     State("profile-logo-upload", "contents"),
+    State("profile-logo-pending", "data"),
     State("new-user-first", "value"),
     State("new-user-last", "value"),
     State("new-user-email", "value"),
@@ -666,6 +672,7 @@ def mutate_company_profile(
     pending_action_out = no_update
     confirm_message = no_update
     confirm_class = no_update
+    logo_pending_out = no_update
     trigger = ctx.triggered_id
     if not trigger:
         raise PreventUpdate
@@ -679,6 +686,7 @@ def mutate_company_profile(
             no_update,
             no_update,
             "modal-backdrop is-hidden",
+            no_update,
             no_update,
             no_update,
             no_update,
@@ -696,18 +704,24 @@ def mutate_company_profile(
             None,
             no_update,
             "modal-backdrop is-hidden",
+            no_update,
         )
     profile_values = state_values[: len(PROFILE_FIELDS)]
     logo_filename = state_values[len(PROFILE_FIELDS)]
     logo_contents = state_values[len(PROFILE_FIELDS) + 1]
-    new_user_values = state_values[len(PROFILE_FIELDS) + 2:]
+    logo_pending = state_values[len(PROFILE_FIELDS) + 2]
+    new_user_values = state_values[len(PROFILE_FIELDS) + 3:]
     if trigger == "save-company-profile":
         payload = {field_id: value for (field_id, _label), value in zip(PROFILE_FIELDS, profile_values)}
+        pending_logo = logo_pending if isinstance(logo_pending, dict) else {}
+        save_filename = logo_filename or pending_logo.get("filename")
+        save_contents = logo_contents or pending_logo.get("contents")
         try:
             repository.update_company_profile(company_id, payload)
-            if logo_filename and logo_contents:
-                repository.update_company_logo(company_id, logo_filename, logo_contents)
+            if save_filename and save_contents:
+                repository.update_company_logo(company_id, save_filename, save_contents)
                 result = html.Div("Company profile and logo updated.", className="notice success")
+                logo_pending_out = None
             else:
                 result = html.Div("Company profile updated.", className="notice success")
         except ValueError as exc:
@@ -873,4 +887,5 @@ def mutate_company_profile(
         pending_action_out,
         confirm_message,
         confirm_class,
+        logo_pending_out,
     )

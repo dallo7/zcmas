@@ -4586,7 +4586,17 @@ body {
 
 #app-root.zcams-public-shell .page-slot {
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#app-root.zcams-public-shell .contract-sign-page {
+  min-height: 100%;
+  height: auto;
+  overflow: visible;
+  padding-bottom: 48px;
+  background: var(--mist-50);
 }
 
 #app-root.app-shell {

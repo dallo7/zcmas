@@ -16,6 +16,8 @@ def register_invoice_routes(flask_app) -> None:
     @flask_app.before_request
     def _protect_downloads():
         path = (request.path or "").lower()
+        if path.startswith("/download/company-logo/"):
+            return None
         if path.startswith("/download/") or path.startswith("/preview/contract"):
             if not auth.current_user():
                 abort(401)

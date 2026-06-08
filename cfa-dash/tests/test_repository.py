@@ -114,6 +114,17 @@ def test_contract_sign_url_uses_zcams_info_when_bird_production_email(monkeypatc
     assert url.startswith("https://zcams.info/contract-sign?")
 
 
+def test_company_logo_href_is_relative(monkeypatch):
+    from services.repository import company_logo_href, execute, get_company
+
+    company_id = DEMO_COMPANY_ID
+    execute("UPDATE companies SET logo_path = ? WHERE id = ?", (f"uploads/{company_id}/company-logo-invoice.png", company_id))
+    href = company_logo_href(company_id)
+    assert href == f"/download/company-logo/{company_id}"
+    assert "127.0.0.1" not in href
+    assert get_company(company_id).get("logo_path")
+
+
 def test_list_invoices_for_user_scopes_by_company():
     super_rows = list_invoices_for_user({"role": "SUPER_ADMIN", "company_id": DEMO_COMPANY_ID})
     company_rows = list_invoices_for_user({"role": "COMPANY_ADMIN", "company_id": DEMO_COMPANY_ID})

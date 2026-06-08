@@ -3004,12 +3004,18 @@ def update_company_logo(company_id: str, filename: str, contents: str | None) ->
     return get_company(company_id)
 
 
-def company_logo_url(company_id: str = DEMO_COMPANY_ID) -> str | None:
+def company_logo_href(company_id: str = DEMO_COMPANY_ID) -> str | None:
     company = get_company(company_id)
     if not company.get("logo_path"):
         return None
-    base = os.getenv("PUBLIC_APP_URL", "http://127.0.0.1:8050").rstrip("/")
-    return f"{base}/download/company-logo/{company_id}"
+    return f"/download/company-logo/{company_id}"
+
+
+def company_logo_url(company_id: str = DEMO_COMPANY_ID) -> str | None:
+    href = company_logo_href(company_id)
+    if not href:
+        return None
+    return f"{_public_app_base_url()}{href}"
 
 
 def compliance_score(company_id: str = DEMO_COMPANY_ID) -> int:
