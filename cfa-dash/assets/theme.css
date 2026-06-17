@@ -1274,6 +1274,136 @@ button[data-dash-is-loading="true"] {
   background: linear-gradient(135deg, #eaf6e5 0%, #ffd48a 100%);
 }
 
+.invoice-register-search {
+  margin-bottom: 10px;
+}
+
+.invoice-register-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.invoice-register-heading h2 {
+  margin-bottom: 6px;
+}
+
+.invoice-presentation-toggle.is-active {
+  background: #eaf6ec;
+  border-color: rgba(6, 69, 31, 0.35);
+  color: #06451f;
+}
+
+.invoice-register-table-scroll {
+  overflow-x: auto;
+}
+
+.invoice-register-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.invoice-register-primary {
+  font-weight: 600;
+}
+
+.invoice-register-mono {
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.95em;
+}
+
+.invoice-register-amount {
+  font-size: 1.05rem;
+  color: #06451f;
+}
+
+.invoice-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(12, 39, 12, 0.12);
+  background: #ffffff;
+  color: #0c270c;
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 14px rgba(12, 39, 12, 0.07);
+}
+
+.invoice-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.invoice-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.invoice-action-btn--pdf {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3b3f98 0%, #6d5dfc 100%);
+  border-color: rgba(109, 93, 252, 0.35);
+}
+
+.invoice-action-btn--whatsapp {
+  color: #ffffff;
+  background: linear-gradient(135deg, #1f7a43 0%, #25a55a 100%);
+  border-color: rgba(37, 165, 90, 0.35);
+}
+
+.invoice-action-btn--settle {
+  color: #06451f;
+  background: #eaf6ec;
+}
+
+.invoice-action-btn--open,
+.invoice-action-btn--copy {
+  min-width: 78px;
+}
+
+.invoice-register-card.is-presentation .section-lead,
+.invoice-register-card.is-presentation .table-filter-status {
+  font-size: 1rem;
+}
+
+.invoice-register-table.is-presentation th {
+  font-size: 14px;
+  padding: 16px 18px;
+  letter-spacing: 0.04em;
+}
+
+.invoice-register-table.is-presentation td {
+  font-size: 17px;
+  padding: 16px 18px;
+  line-height: 1.45;
+}
+
+.invoice-register-table.is-presentation .invoice-register-amount {
+  font-size: 1.25rem;
+}
+
+.invoice-register-table.is-presentation .invoice-action-btn {
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 15px;
+}
+
+.invoice-register-table.is-presentation .badge {
+  font-size: 14px;
+  min-height: 28px;
+  padding: 4px 12px;
+}
+
 .contract-terms-input {
   min-height: 150px;
 }

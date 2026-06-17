@@ -352,3 +352,8 @@ CREATE TABLE IF NOT EXISTS settlement_download_logs (
 
 CREATE INDEX IF NOT EXISTS idx_settlement_download_logs_run ON settlement_download_logs(run_id);
 CREATE INDEX IF NOT EXISTS idx_settlement_download_logs_downloaded ON settlement_download_logs(downloaded_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_reviewed_bl ON invoices(reviewed_bl_id);
+CREATE INDEX IF NOT EXISTS idx_bl_company_id ON bills_of_lading(company_id);

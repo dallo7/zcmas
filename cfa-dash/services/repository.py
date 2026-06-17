@@ -2601,7 +2601,15 @@ def invoice_share_message(invoice: dict) -> str:
 
 def invoice_whatsapp_link(invoice_id: str, phone: str | None = None) -> str:
     invoice = get_invoice(invoice_id)
-    target = phone or invoice.get("contact_phone") or get_company().get("whatsapp") or get_company().get("phone")
+    return invoice_whatsapp_link_from_invoice(invoice, phone=phone)
+
+
+def invoice_whatsapp_link_from_invoice(invoice: dict, phone: str | None = None) -> str:
+    """Build a WhatsApp share link from a register row (no extra DB fetch)."""
+    target = phone or invoice.get("contact_phone")
+    if not target:
+        company = get_company(invoice.get("company_id") or DEMO_COMPANY_ID)
+        target = company.get("whatsapp") or company.get("phone")
     return whatsapp_url(target, invoice_share_message(invoice))
 
 

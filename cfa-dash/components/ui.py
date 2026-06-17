@@ -82,7 +82,7 @@ def metric_card_link(label: str, value, accent: str, href: str):
     )
 
 
-def status_table(headers: list[str], rows: list[list]):
+def status_table(headers: list[str], rows: list[list], *, table_class: str = "data-table"):
     return html.Table(
         [
             html.Thead(html.Tr([html.Th(header) for header in headers])),
@@ -92,5 +92,5 @@ def status_table(headers: list[str], rows: list[list]):
                 else [html.Tr(html.Td("No records yet.", colSpan=len(headers), className="muted"))]
             ),
         ],
-        className="data-table",
+        className=table_class,
     )

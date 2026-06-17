@@ -197,6 +197,14 @@ def _migrate_invoices(conn: sqlite3.Connection) -> None:
     for column, statement in migrations.items():
         if column not in existing:
             conn.execute(statement)
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON invoices(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+        CREATE INDEX IF NOT EXISTS idx_invoices_reviewed_bl ON invoices(reviewed_bl_id);
+        CREATE INDEX IF NOT EXISTS idx_bl_company_id ON bills_of_lading(company_id);
+        """
+    )
     conn.commit()
 
 
