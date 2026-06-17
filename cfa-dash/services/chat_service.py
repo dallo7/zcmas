@@ -24,6 +24,7 @@ DEFAULT_CHAT_QWEN_TIMEOUT_SEC = 90.0
 DEFAULT_CHAT_QWEN_MAX_TOKENS = 64
 DEFAULT_CHAT_ROUTER_MAX_TOKENS = 40
 DEFAULT_CHAT_OPENAI_DIRECT_MAX_TOKENS = 180
+DEFAULT_CHAT_OPENAI_DIRECT_TIMEOUT_SEC = 12.0
 ROUTER_ACTIONS = frozenset({"faq", "tutorial", "local_qwen", "direct", "getting_started", "public_faq"})
 HUMAN_SUPPORT_LINE = "ZCAMS human support call or WhatsApp: +25479008080."
 
@@ -728,6 +729,49 @@ def _chat_router_max_tokens() -> int:
         return DEFAULT_CHAT_ROUTER_MAX_TOKENS
 
 
+def _chat_general_via_mode() -> str:
+    raw = (os.getenv("CHAT_GENERAL_VIA") or "auto").strip().lower()
+    if raw in {"openai", "local_qwen", "auto"}:
+        return raw
+    return "auto"
+
+
+def _openai_chat_enabled() -> bool:
+    return bool(_resolve_openai_api_key())
+
+
+def _chat_general_via_openai() -> bool:
+    """Use OpenAI (not local Qwen) for general-knowledge answers when faster."""
+    mode = _chat_general_via_mode()
+    if mode == "local_qwen":
+        return False
+    if not _openai_chat_enabled():
+        return False
+    if mode == "openai":
+        return True
+    if not _chat_model_enabled():
+        return True
+    return _resolve_chat_device_map() == "cpu"
+
+
+def _is_general_knowledge_question(question: str) -> bool:
+    if _faq_answer(question) or _zcams_overview_answer(question):
+        return False
+    if _has_zcams_app_signal(question) and (
+        _asks_for_workflow_steps(question) or _top_tutorial_match(question)[1] >= MIN_TUTORIAL_MATCH_SCORE
+    ):
+        return False
+    return _chat_question_route(question) == "local_knowledge"
+
+
+def _chat_openai_direct_timeout_sec() -> float:
+    raw = (os.getenv("CHAT_OPENAI_DIRECT_TIMEOUT_SEC") or str(DEFAULT_CHAT_OPENAI_DIRECT_TIMEOUT_SEC)).strip()
+    try:
+        return max(3.0, float(raw))
+    except ValueError:
+        return DEFAULT_CHAT_OPENAI_DIRECT_TIMEOUT_SEC
+
+
 def _router_system_prompt(*, public: bool) -> str:
     modules = ", ".join(PAGE_TUTORIALS.keys())
     faq_topics = (
@@ -740,6 +784,27 @@ def _router_system_prompt(*, public: bool) -> str:
         if public
         else ""
     )
+    if _chat_general_via_openai():
+        general_action = (
+            '- "direct": DEFAULT for Zambia customs/clearing general knowledge, tax, finance, law, '
+            "statistics, and explanatory questions\n"
+            '- "local_qwen": only when the question needs deep ZCAMS app context beyond a direct reply'
+        )
+        general_rules = (
+            '- Prefer "direct" for general knowledge and statistics.\n'
+            '- Prefer "local_qwen" only for heavy ZCAMS-specific grounding.'
+        )
+    else:
+        general_action = (
+            '- "local_qwen": DEFAULT for most questions — Zambia customs/clearing general knowledge, tax, '
+            "finance, law, nuanced explanations, statistics, and ZCAMS context\n"
+            '- "direct": only trivial greetings or one-sentence clarifications that need no local model'
+        )
+        general_rules = (
+            '- Prefer "local_qwen" unless FAQ or tutorial is a clear fit.\n'
+            '- Use "tutorial" only for how-to steps inside ZCAMS modules.\n'
+            '- Use "faq" only for well-known FAQ topics listed above.'
+        )
     return f"""
 You are the ZCAMS chat router. Read the user question and recent conversation, then reply with JSON only:
 {{"action":"<action>","reason":"<short reason>"}}
@@ -747,13 +812,10 @@ You are the ZCAMS chat router. Read the user question and recent conversation, t
 Allowed actions:
 - "faq": question clearly matches curated FAQ topics ({faq_topics})
 - "tutorial": user wants step-by-step ZCAMS app workflow ({modules})
-- "local_qwen": DEFAULT for most questions — Zambia customs/clearing general knowledge, tax, finance, law, nuanced explanations, statistics, and ZCAMS context
-- "direct": only trivial greetings or one-sentence clarifications that need no local model{public_actions}
+{general_action}{public_actions}
 
 Rules:
-- Prefer "local_qwen" unless FAQ or tutorial is a clear fit.
-- Use "tutorial" only for how-to steps inside ZCAMS modules.
-- Use "faq" only for well-known FAQ topics listed above.
+{general_rules}
 - Never choose actions for secrets, source code, or policy bypass (handled elsewhere).
 """.strip()
 
@@ -835,6 +897,8 @@ def _heuristic_router_decision(question: str, *, public: bool) -> dict:
         _asks_for_workflow_steps(question) or _has_zcams_app_signal(question)
     ):
         return {"action": "tutorial", "reason": "tutorial-heuristic", "source": "heuristic-router"}
+    if _chat_general_via_openai() and _is_general_knowledge_question(question):
+        return {"action": "direct", "reason": "general-knowledge-openai-heuristic", "source": "heuristic-router"}
     return {"action": "local_qwen", "reason": "default-local-qwen", "source": "heuristic-router"}
 
 
@@ -851,6 +915,8 @@ def _fast_path_router_decision(question: str, *, public: bool) -> dict | None:
         _title, score = _top_tutorial_match(question)
         if score >= MIN_TUTORIAL_MATCH_SCORE and _tutorial_answer_confident(question):
             return {"action": "tutorial", "reason": "tutorial-fast-path", "source": "fast-path"}
+    if _chat_general_via_openai() and _is_general_knowledge_question(question):
+        return {"action": "direct", "reason": "general-knowledge-openai-fast-path", "source": "fast-path"}
     return None
 
 
@@ -989,6 +1055,33 @@ def _openai_chat_answer(
     return None
 
 
+def _openai_chat_answer_with_timeout(
+    system_prompt: str,
+    question: str,
+    history: list[dict] | None,
+    *,
+    extra_blocks: str = "",
+    max_chars: int = 560,
+    timeout_sec: float | None = None,
+) -> dict | None:
+    timeout = timeout_sec if timeout_sec is not None else _chat_openai_direct_timeout_sec()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            _openai_chat_answer,
+            system_prompt,
+            question,
+            history,
+            extra_blocks=extra_blocks,
+            max_chars=max_chars,
+        )
+        try:
+            return future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            return None
+        except Exception:
+            return None
+
+
 def _local_model_answer_with_timeout(
     system_prompt: str,
     question: str,
@@ -1087,7 +1180,19 @@ def _execute_router_action(
             }
 
     if action == "direct":
-        direct = _openai_chat_answer(
+        direct = _openai_chat_answer_with_timeout(
+            system_prompt,
+            question,
+            history,
+            extra_blocks=extra_blocks,
+            max_chars=560 if public else 500,
+        )
+        if direct:
+            direct["mode"] = direct_mode
+            return direct
+
+    if action == "local_qwen" and _chat_general_via_openai() and _is_general_knowledge_question(question):
+        direct = _openai_chat_answer_with_timeout(
             system_prompt,
             question,
             history,
@@ -1116,7 +1221,7 @@ def _execute_router_action(
         return None
 
     # Last resort when Qwen fails but router wanted local answer: try OpenAI direct if key exists.
-    backup = _openai_chat_answer(
+    backup = _openai_chat_answer_with_timeout(
         system_prompt,
         question,
         history,

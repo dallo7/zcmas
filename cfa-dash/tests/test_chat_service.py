@@ -164,6 +164,7 @@ def test_public_visitor_chat_rejects_unrelated_general_knowledge(monkeypatch):
 
 def test_public_visitor_chat_uses_local_qwen_when_enabled(monkeypatch):
     monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_GENERAL_VIA", "local_qwen")
 
     class FakePipeline:
         def __call__(self, *_args, **_kwargs):
@@ -189,6 +190,7 @@ def test_chat_question_route_splits_workflow_and_knowledge():
 
 def test_public_chat_routes_zra_statistics_away_from_tutorials(monkeypatch):
     monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_GENERAL_VIA", "local_qwen")
 
     class FakePipeline:
         def __call__(self, *_args, **_kwargs):
@@ -283,6 +285,7 @@ def test_chat_blocks_dependency_questions(monkeypatch):
 
 def test_chat_openai_router_routes_local_qwen(monkeypatch, tmp_path):
     monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_GENERAL_VIA", "local_qwen")
     monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
     monkeypatch.setattr(
         "services.chat_service._resolve_router_decision",
@@ -305,6 +308,7 @@ def test_chat_openai_router_routes_local_qwen(monkeypatch, tmp_path):
 
 def test_chat_heuristic_router_falls_back_when_openai_unavailable(monkeypatch, tmp_path):
     monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_GENERAL_VIA", "local_qwen")
     monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
     monkeypatch.setattr("services.chat_service._openai_router_decision", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
@@ -346,3 +350,65 @@ def test_fast_path_skips_openai_router(monkeypatch, tmp_path):
 
     assert calls["router"] == 0
     assert result["mode"] == "faq"
+
+
+def test_general_knowledge_fast_path_uses_openai_on_cpu(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_GENERAL_VIA", "auto")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
+    monkeypatch.setenv("CHAT_DEVICE_MAP", "cpu")
+    _resolve_chat_device_map.cache_clear()
+
+    calls = {"router": 0, "qwen": 0}
+
+    def counting_router(*_args, **_kwargs):
+        calls["router"] += 1
+        return None
+
+    monkeypatch.setattr("services.chat_service._openai_router_decision", counting_router)
+    monkeypatch.setattr(
+        "services.chat_service._openai_chat_answer_with_timeout",
+        lambda *_args, **_kwargs: {
+            "answer": "ZRA publishes monthly declaration statistics; exact counts vary by period.",
+            "mode": "openai-direct",
+        },
+    )
+    monkeypatch.setattr(
+        "services.chat_service._local_model_answer_with_timeout",
+        lambda *_args, **_kwargs: calls.update({"qwen": calls["qwen"] + 1}) or None,
+    )
+
+    result = answer_question("How many customs declarations does ZRA process per month?")
+
+    _resolve_chat_device_map.cache_clear()
+    assert calls["router"] == 0
+    assert calls["qwen"] == 0
+    assert result["mode"] == "openai-direct"
+    assert "fast-path:direct" in (tmp_path / "chat_state.md").read_text(encoding="utf-8")
+
+
+def test_general_knowledge_prefers_openai_when_configured(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_GENERAL_VIA", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key")
+    monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
+    monkeypatch.setattr("services.chat_service._faq_answer", lambda _q: None)
+    monkeypatch.setattr("services.chat_service._openai_router_decision", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "services.chat_service._openai_chat_answer_with_timeout",
+        lambda *_args, **_kwargs: {
+            "answer": "Transit bonds in Zambia secure duties while goods move under customs control.",
+            "mode": "openai-direct",
+        },
+    )
+    monkeypatch.setattr(
+        "services.chat_service._local_model_answer_with_timeout",
+        lambda *_args, **_kwargs: {"answer": "Should not use Qwen.", "mode": "local-model"},
+    )
+
+    result = answer_question("Explain how transit cargo bonds work in Zambia.")
+
+    assert result["mode"] == "openai-direct"
+    assert "transit" in result["answer"].lower()
+    assert "fast-path:direct" in (tmp_path / "chat_state.md").read_text(encoding="utf-8")
