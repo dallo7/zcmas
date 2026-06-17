@@ -22,6 +22,7 @@ from components.workflow import workflow_strip
 from components.icons import icon
 from services import agentic_workflow, auth, repository
 from services.invoice_routes import register_invoice_routes
+from services.pwa_routes import pwa_enabled, register_pwa_routes
 from services.repository import bootstrap
 
 
@@ -39,15 +40,49 @@ def _start_chat_warmup() -> None:
 
 _start_chat_warmup()
 
+PWA_META_TAGS = [
+    {"name": "viewport", "content": "width=device-width, initial-scale=1, viewport-fit=cover"},
+    {"name": "theme-color", "content": "#0a4f20"},
+    {"name": "apple-mobile-web-app-capable", "content": "yes"},
+    {"name": "apple-mobile-web-app-title", "content": "ZCAMS"},
+    {"name": "apple-mobile-web-app-status-bar-style", "content": "black-translucent"},
+    {"name": "mobile-web-app-capable", "content": "yes"},
+    {"name": "application-name", "content": "ZCAMS"},
+]
+
 app = dash.Dash(
     __name__,
     use_pages=False,
     suppress_callback_exceptions=True,
     title="ZCAMS",
+    meta_tags=PWA_META_TAGS if pwa_enabled() else None,
 )
+
+if pwa_enabled():
+    app.index_string = """<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        <link rel="manifest" href="/manifest.webmanifest">
+        <link rel="apple-touch-icon" href="/assets/zcams-logo.png">
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+"""
 server = app.server
 auth.configure_server(server)
 register_invoice_routes(server)
+register_pwa_routes(server)
 
 # Register page modules without Dash's built-in page_container router
 # (that router uses prevent_initial_call=True and leaves a blank first paint).
