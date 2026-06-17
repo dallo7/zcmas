@@ -279,3 +279,39 @@ def test_chat_blocks_dependency_questions(monkeypatch):
 
     assert result["mode"] == "governed"
     assert result["answer"] == "I do not know and I do not have any idea."
+
+
+def test_chat_openai_fallback_when_local_times_out(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
+
+    monkeypatch.setattr("services.chat_service._faq_answer", lambda _q: None)
+    monkeypatch.setattr("services.chat_service._tutorial_context", lambda _q: "")
+    monkeypatch.setattr("services.chat_service._retrieved_context", lambda _q: "")
+    monkeypatch.setattr("services.chat_service._local_model_answer_with_timeout", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "services.chat_service._openai_chat_answer",
+        lambda *_args, **_kwargs: {
+            "answer": "ZRA processes a large volume of customs declarations each month.",
+            "mode": "openai-fallback",
+        },
+    )
+
+    result = answer_question("How many declarations does ZRA make in a month?")
+
+    assert result["mode"] == "openai-fallback"
+    assert "declarations" in result["answer"].lower()
+    assert (tmp_path / "chat_state.md").exists()
+    assert "How many declarations" in (tmp_path / "chat_state.md").read_text(encoding="utf-8")
+
+
+def test_chat_state_md_is_written_for_faq_answers(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+    monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
+
+    result = answer_question("What is a Z-SAD?")
+
+    assert result["mode"] == "faq"
+    content = (tmp_path / "chat_state.md").read_text(encoding="utf-8")
+    assert "What is a Z-SAD?" in content
+    assert "single-use" in content

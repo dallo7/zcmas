@@ -25,7 +25,8 @@ def layout(**_kwargs):
                     [
                         html.H2("Ask ZCAMS"),
                         html.P(
-                            "Ask workflow questions about BL review, Z-SAD generation, GN 83 fees, invoices, payments, and cargo release.",
+                            "Ask ZCAMS system/workflow questions or Zambia customs, finance, tax, and legal general-knowledge questions. "
+                            "Local Qwen runs first; OpenAI is used if the answer takes longer than 7 seconds.",
                             className="muted section-lead",
                         ),
                         dcc.Store(id="zcams-chat-history", data=[]),
