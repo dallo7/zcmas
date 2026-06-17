@@ -22,6 +22,7 @@ from components.workflow import workflow_strip
 from components.icons import icon
 from services import agentic_workflow, auth, repository
 from services.invoice_routes import register_invoice_routes
+from services.asycuda_routes import register_asycuda_routes
 from services.pwa_routes import pwa_enabled, register_pwa_routes
 from services.repository import bootstrap
 
@@ -82,6 +83,7 @@ if pwa_enabled():
 server = app.server
 auth.configure_server(server)
 register_invoice_routes(server)
+register_asycuda_routes(server)
 register_pwa_routes(server)
 
 # Register page modules without Dash's built-in page_container router

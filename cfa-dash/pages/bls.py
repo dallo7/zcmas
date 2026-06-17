@@ -3,7 +3,7 @@ import binascii
 from pathlib import Path
 
 import dash_ag_grid as dag
-from dash import ALL, Input, Output, State, callback, ctx, dcc, html, no_update, register_page
+from dash import ALL, Input, Output, State, callback, clientside_callback, ctx, dcc, html, no_update, register_page
 from dash.exceptions import PreventUpdate
 
 from components.icons import icon
@@ -11,6 +11,12 @@ from components.layout import header, section_label
 from components.workflow import shortcut_chip
 from services import ocr
 from services import repository
+from services.asycuda_xml import (
+    WORKFLOW_CLEARANCE,
+    bl_payload_to_export_context,
+    build_asycuda_xml,
+    export_filename,
+)
 from services.db import UPLOAD_DIR
 from services.gn83 import all_category_options, is_gn83_exempt, lookup_fee, unit_label
 from services.repository import BL_CANCEL_REASONS, BlNumberConflict
@@ -68,6 +74,8 @@ def layout(**_kwargs):
             dcc.Store(id="bl-upload-pending"),
             dcc.Store(id="bl-duplicate-conflict"),
             dcc.Store(id="bl-edit-id"),
+            dcc.Store(id="bl-local-draft-status"),
+            dcc.Download(id="bl-asycuda-xml-download"),
             dcc.Interval(id="bl-upload-interval", interval=350, disabled=True, n_intervals=0),
             _save_confirm_modal(),
             header(
@@ -95,6 +103,10 @@ def layout(**_kwargs):
                                     html.H2("Upload / Capture BL"),
                                     html.P(
                                         "Upload a source document or capture verified customs values. ZCAMS prepares the BL for Z-SAD generation and full settlement.",
+                                        className="muted section-lead",
+                                    ),
+                                    html.P(
+                                        "Save unfinished CFA clearance work locally as ASYCUDA XML to prevent data loss before Z-SAD lodging.",
                                         className="muted section-lead",
                                     ),
                                 ],
@@ -273,10 +285,32 @@ def layout(**_kwargs):
                                     ),
                                     html.Div(
                                         [
+                                            html.Button(
+                                                "Save draft locally",
+                                                id="bl-save-local-draft",
+                                                className="btn-secondary",
+                                                type="button",
+                                                title="Store current form values in this browser",
+                                            ),
+                                            html.Button(
+                                                "Restore local draft",
+                                                id="bl-restore-local-draft",
+                                                className="btn-secondary",
+                                                type="button",
+                                                title="Reload the last draft saved in this browser",
+                                            ),
+                                            html.Button(
+                                                "Export clearance XML",
+                                                id="bl-export-clearance-xml",
+                                                className="btn-secondary",
+                                                type="button",
+                                                title="Download unfinished BL/clearance capture as ASYCUDA XML",
+                                            ),
                                             html.Button("Save BL", id="save-bl", className="btn-primary", type="button"),
                                         ],
                                         className="row-actions wrap bl-form-actions",
                                     ),
+                                    html.Div(id="bl-local-draft-notice", className="muted compact"),
                                 ],
                                 className="bl-capture-body",
                             ),
@@ -1254,6 +1288,283 @@ def save_bl(
         className="notice success",
     )
     return result, _bl_table(repository.list_bls(company_id)), None, bl["id"], _POST_SAVE_VISIBLE, None, "Save BL", "modal-backdrop is-hidden"
+
+
+@callback(
+    Output("bl-asycuda-xml-download", "data"),
+    Output("bl-result", "children", allow_duplicate=True),
+    Input("bl-export-clearance-xml", "n_clicks"),
+    State("bl-extracted-data", "data"),
+    State("bl-uploaded-file", "data"),
+    State("bl_number", "value"),
+    State("doc_type", "value"),
+    State("route_type", "value"),
+    State("transport_mode", "value"),
+    State("zra_regime", "value"),
+    State("consignee_name", "value"),
+    State("company_name", "value"),
+    State("consignee_tin", "value"),
+    State("consignor_tin", "value"),
+    State("agent_license", "value"),
+    State("declarant_number", "value"),
+    State("consignment_value", "value"),
+    State("origin", "value"),
+    State("destination", "value"),
+    State("no_containers", "value"),
+    State("gross_weight", "value"),
+    State("cargo_description", "value"),
+    State("gn83_category", "value"),
+    State("gn83_unit", "value"),
+    State("gn83_fee_usd", "value"),
+    State("auth-user", "data"),
+    prevent_initial_call=True,
+)
+def export_unfinished_asycuda_xml(
+    _export_clicks,
+    extracted_data,
+    uploaded_file,
+    bl_number,
+    doc_type,
+    route_type,
+    transport_mode,
+    zra_regime,
+    consignee_name,
+    company_name,
+    consignee_tin,
+    consignor_tin,
+    agent_license,
+    declarant_number,
+    consignment_value,
+    origin,
+    destination,
+    no_containers,
+    gross_weight,
+    cargo_description,
+    gn83_category,
+    gn83_unit,
+    gn83_fee_usd,
+    user,
+):
+    if not _export_clicks:
+        raise PreventUpdate
+    if not bl_number:
+        return no_update, html.Div("Enter a BL number before exporting ASYCUDA XML.", className="notice error")
+    company_id = (user or {}).get("company_id") or repository.DEMO_COMPANY_ID
+    company = repository.get_company(company_id)
+    payload = _form_payload(
+        extracted_data,
+        uploaded_file,
+        bl_number,
+        doc_type,
+        route_type,
+        transport_mode,
+        zra_regime,
+        consignee_name,
+        company_name,
+        consignee_tin,
+        consignor_tin,
+        agent_license,
+        declarant_number,
+        consignment_value,
+        origin,
+        destination,
+        no_containers,
+        gross_weight,
+        cargo_description,
+        gn83_category,
+        gn83_unit,
+        gn83_fee_usd,
+    )
+    context = bl_payload_to_export_context(payload, company)
+    xml_body = build_asycuda_xml(
+        workflow=WORKFLOW_CLEARANCE,
+        bl=context["bl"],
+        company=context.get("company"),
+        cargo_items=context.get("cargo_items") or [],
+        status="DRAFT",
+    )
+    filename = export_filename(workflow=WORKFLOW_CLEARANCE, bl=payload)
+    notice = html.Div(
+        f"Downloaded unfinished clearance ASYCUDA XML for {bl_number}.",
+        className="notice success",
+    )
+    return {"content": xml_body, "filename": filename, "type": "application/xml"}, notice
+
+
+clientside_callback(
+    """
+    function(saveClicks, bl_number, doc_type, route_type, transport_mode, zra_regime,
+             consignee_name, company_name, consignee_tin, consignor_tin, agent_license,
+             declarant_number, consignment_value, origin, destination, no_containers,
+             gross_weight, cargo_description, gn83_category, gn83_unit, gn83_fee_usd) {
+        if (!saveClicks) {
+            return window.dash_clientside.no_update;
+        }
+        const draft = {
+            savedAt: new Date().toISOString(),
+            fields: {
+                bl_number, doc_type, route_type, transport_mode, zra_regime,
+                consignee_name, company_name, consignee_tin, consignor_tin, agent_license,
+                declarant_number, consignment_value, origin, destination, no_containers,
+                gross_weight, cargo_description, gn83_category, gn83_unit, gn83_fee_usd
+            }
+        };
+        localStorage.setItem("zcams-bl-capture-draft", JSON.stringify(draft));
+        return draft.savedAt;
+    }
+    """,
+    Output("bl-local-draft-status", "data"),
+    Input("bl-save-local-draft", "n_clicks"),
+    State("bl_number", "value"),
+    State("doc_type", "value"),
+    State("route_type", "value"),
+    State("transport_mode", "value"),
+    State("zra_regime", "value"),
+    State("consignee_name", "value"),
+    State("company_name", "value"),
+    State("consignee_tin", "value"),
+    State("consignor_tin", "value"),
+    State("agent_license", "value"),
+    State("declarant_number", "value"),
+    State("consignment_value", "value"),
+    State("origin", "value"),
+    State("destination", "value"),
+    State("no_containers", "value"),
+    State("gross_weight", "value"),
+    State("cargo_description", "value"),
+    State("gn83_category", "value"),
+    State("gn83_unit", "value"),
+    State("gn83_fee_usd", "value"),
+    prevent_initial_call=True,
+)
+
+
+clientside_callback(
+    """
+    function(savedAt) {
+        if (!savedAt) {
+            return "";
+        }
+        try {
+            return "Local draft saved in this browser at " + new Date(savedAt).toLocaleString() + ".";
+        } catch (e) {
+            return "Local draft saved in this browser.";
+        }
+    }
+    """,
+    Output("bl-local-draft-notice", "children"),
+    Input("bl-local-draft-status", "data"),
+)
+
+
+clientside_callback(
+    """
+    function(restoreClicks) {
+        if (!restoreClicks) {
+            return [
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                "No local draft found in this browser.",
+            ];
+        }
+        const raw = localStorage.getItem("zcams-bl-capture-draft");
+        if (!raw) {
+            return [
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                window.dash_clientside.no_update,
+                "No local draft found in this browser.",
+            ];
+        }
+        const draft = JSON.parse(raw);
+        const f = draft.fields || {};
+        const notice = draft.savedAt
+            ? "Restored local draft saved at " + new Date(draft.savedAt).toLocaleString() + "."
+            : "Restored local draft.";
+        return [
+            f.bl_number || null,
+            f.doc_type || null,
+            f.route_type || null,
+            f.transport_mode || null,
+            f.zra_regime || null,
+            f.consignee_name || null,
+            f.company_name || null,
+            f.consignee_tin || null,
+            f.consignor_tin || null,
+            f.agent_license || null,
+            f.declarant_number || null,
+            f.consignment_value || null,
+            f.origin || null,
+            f.destination || null,
+            f.no_containers || null,
+            f.gross_weight || null,
+            f.cargo_description || null,
+            f.gn83_category || null,
+            f.gn83_unit || null,
+            f.gn83_fee_usd || null,
+            notice,
+        ];
+    }
+    """,
+    [
+        Output("bl_number", "value", allow_duplicate=True),
+        Output("doc_type", "value", allow_duplicate=True),
+        Output("route_type", "value", allow_duplicate=True),
+        Output("transport_mode", "value", allow_duplicate=True),
+        Output("zra_regime", "value", allow_duplicate=True),
+        Output("consignee_name", "value", allow_duplicate=True),
+        Output("company_name", "value", allow_duplicate=True),
+        Output("consignee_tin", "value", allow_duplicate=True),
+        Output("consignor_tin", "value", allow_duplicate=True),
+        Output("agent_license", "value", allow_duplicate=True),
+        Output("declarant_number", "value", allow_duplicate=True),
+        Output("consignment_value", "value", allow_duplicate=True),
+        Output("origin", "value", allow_duplicate=True),
+        Output("destination", "value", allow_duplicate=True),
+        Output("no_containers", "value", allow_duplicate=True),
+        Output("gross_weight", "value", allow_duplicate=True),
+        Output("cargo_description", "value", allow_duplicate=True),
+        Output("gn83_category", "value", allow_duplicate=True),
+        Output("gn83_unit", "value", allow_duplicate=True),
+        Output("gn83_fee_usd", "value", allow_duplicate=True),
+        Output("bl-local-draft-notice", "children", allow_duplicate=True),
+    ],
+    Input("bl-restore-local-draft", "n_clicks"),
+    prevent_initial_call=True,
+)
 
 
 def save_uploaded_bl(contents: str, filename: str | None) -> Path:

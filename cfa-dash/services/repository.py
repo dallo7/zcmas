@@ -2254,6 +2254,48 @@ def get_reviewed_bl(reviewed_id: str) -> dict:
     return reviewed
 
 
+def asycuda_export_context_for_bl(bl_id: str) -> dict:
+    bl = get_bl(bl_id)
+    if not bl:
+        raise ValueError(f"Unknown BL id: {bl_id}")
+    company_id = bl.get("company_id") or DEMO_COMPANY_ID
+    company = get_company(company_id)
+    containers = rows("SELECT * FROM containers WHERE bl_id = ?", (bl_id,))
+    return {
+        "bl": bl,
+        "company": company,
+        "cargo_items": bl.get("cargo_items") or [],
+        "containers": containers,
+    }
+
+
+def asycuda_export_context_for_declaration(reviewed_id: str) -> dict:
+    reviewed = get_reviewed_bl(reviewed_id)
+    if not reviewed:
+        raise ValueError(f"Unknown reviewed BL id: {reviewed_id}")
+    bl = get_bl(reviewed["bl_id"])
+    if not bl:
+        raise ValueError("Reviewed BL has no backing BL record")
+    company = get_company(bl.get("company_id") or DEMO_COMPANY_ID)
+    containers = rows("SELECT * FROM containers WHERE bl_id = ?", (bl["id"],))
+    invoice = row(
+        """
+        SELECT * FROM invoices
+        WHERE reviewed_bl_id = ? AND status != 'CANCELLED'
+        ORDER BY created_at DESC LIMIT 1
+        """,
+        (reviewed_id,),
+    )
+    return {
+        "bl": bl,
+        "company": company,
+        "cargo_items": bl.get("cargo_items") or [],
+        "containers": containers,
+        "reviewed": reviewed,
+        "invoice": invoice,
+    }
+
+
 def list_z_sad_history(reviewed_bl_id: str) -> list[dict]:
     history = rows(
         """

@@ -292,6 +292,22 @@ def _reviewed_actions(item: dict, invoice: dict):
                 disabled=not has_active_zsad or item["status"] not in {"REVIEWED_ZSAD_ISSUED", "AWAITING_PAYMENT"},
                 title="Edit BL values after ASYCUDA feedback and keep the same active Z-SAD for resend",
             ),
+            (
+                html.A(
+                    [icon("lucide:download", 14), "Export declaration XML"],
+                    href=f"/download/asycuda/declaration/{item['id']}.xml",
+                    className="btn-secondary",
+                    title="Download declaration ASYCUDA XML for local backup before CFA clearance lodging",
+                )
+                if has_active_zsad and item.get("status") != "CANCELLED"
+                else html.Button(
+                    "Export declaration XML",
+                    className="btn-secondary",
+                    type="button",
+                    disabled=True,
+                    title="Available after Z-SAD is issued",
+                )
+            ),
             html.Button(
                 "Issue Release",
                 id={"type": "issue-release", "id": item["id"]},
