@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import uuid
 from pathlib import Path
 
@@ -25,6 +26,18 @@ from services.repository import bootstrap
 
 
 bootstrap()
+
+
+def _start_chat_warmup() -> None:
+    try:
+        from services.chat_service import warm_chat_pipeline
+
+        threading.Thread(target=warm_chat_pipeline, daemon=True, name="zcams-chat-warmup").start()
+    except Exception:
+        pass
+
+
+_start_chat_warmup()
 
 app = dash.Dash(
     __name__,

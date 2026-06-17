@@ -281,28 +281,41 @@ def test_chat_blocks_dependency_questions(monkeypatch):
     assert result["answer"] == "I do not know and I do not have any idea."
 
 
-def test_chat_openai_fallback_when_local_times_out(monkeypatch, tmp_path):
+def test_chat_openai_router_routes_local_qwen(monkeypatch, tmp_path):
     monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
     monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
-
-    monkeypatch.setattr("services.chat_service._faq_answer", lambda _q: None)
-    monkeypatch.setattr("services.chat_service._tutorial_context", lambda _q: "")
-    monkeypatch.setattr("services.chat_service._retrieved_context", lambda _q: "")
-    monkeypatch.setattr("services.chat_service._local_model_answer_with_timeout", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
-        "services.chat_service._openai_chat_answer",
+        "services.chat_service._resolve_router_decision",
+        lambda *_args, **_kwargs: {"action": "local_qwen", "source": "openai-router", "reason": "test"},
+    )
+    monkeypatch.setattr(
+        "services.chat_service._local_model_answer_with_timeout",
         lambda *_args, **_kwargs: {
             "answer": "ZRA processes a large volume of customs declarations each month.",
-            "mode": "openai-fallback",
+            "mode": "local-model",
         },
     )
 
     result = answer_question("How many declarations does ZRA make in a month?")
 
-    assert result["mode"] == "openai-fallback"
+    assert result["mode"] == "local-model"
     assert "declarations" in result["answer"].lower()
-    assert (tmp_path / "chat_state.md").exists()
-    assert "How many declarations" in (tmp_path / "chat_state.md").read_text(encoding="utf-8")
+    assert "openai-router:local_qwen" in (tmp_path / "chat_state.md").read_text(encoding="utf-8")
+
+
+def test_chat_heuristic_router_falls_back_when_openai_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "true")
+    monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
+    monkeypatch.setattr("services.chat_service._openai_router_decision", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "services.chat_service._local_model_answer_with_timeout",
+        lambda *_args, **_kwargs: {"answer": "Local Qwen fallback answer.", "mode": "local-model"},
+    )
+
+    result = answer_question("Explain Zambian transit cargo rules in detail.")
+
+    assert result["mode"] == "local-model"
+    assert "heuristic-router:local_qwen" in (tmp_path / "chat_state.md").read_text(encoding="utf-8")
 
 
 def test_chat_state_md_is_written_for_faq_answers(monkeypatch, tmp_path):
@@ -315,3 +328,21 @@ def test_chat_state_md_is_written_for_faq_answers(monkeypatch, tmp_path):
     content = (tmp_path / "chat_state.md").read_text(encoding="utf-8")
     assert "What is a Z-SAD?" in content
     assert "single-use" in content
+    assert "fast-path:faq" in content
+
+
+def test_fast_path_skips_openai_router(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHAT_MODEL_ENABLED", "false")
+    monkeypatch.setenv("CHAT_STATE_MD", str(tmp_path / "chat_state.md"))
+    calls = {"router": 0}
+
+    def counting_router(*_args, **_kwargs):
+        calls["router"] += 1
+        return None
+
+    monkeypatch.setattr("services.chat_service._openai_router_decision", counting_router)
+
+    result = answer_question("What is a Z-SAD?")
+
+    assert calls["router"] == 0
+    assert result["mode"] == "faq"
