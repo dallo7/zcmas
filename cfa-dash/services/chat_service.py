@@ -671,13 +671,21 @@ def clear_chat_pipeline_cache() -> None:
     _resolve_chat_device_map.cache_clear()
 
 
-def warm_chat_pipeline() -> None:
-    """Load local Qwen into memory so the first chat turn is not cold-start slow."""
+def warm_chat_pipeline(*, delay_sec: float | None = None) -> None:
+    """Optionally preload local Qwen after startup. Off by default on small EC2 instances."""
     if not _chat_model_enabled():
         return
-    if os.getenv("CHAT_WARMUP", "true").strip().lower() in {"false", "0", "no", "off"}:
+    if os.getenv("CHAT_WARMUP", "false").strip().lower() not in {"true", "1", "yes", "on"}:
         return
+    wait = delay_sec
+    if wait is None:
+        try:
+            wait = max(0.0, float(os.getenv("CHAT_WARMUP_DELAY_SEC", "45")))
+        except ValueError:
+            wait = 45.0
     try:
+        if wait:
+            time.sleep(wait)
         _pipeline()
     except Exception:
         pass
